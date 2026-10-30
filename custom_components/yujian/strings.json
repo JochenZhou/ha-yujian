@@ -1,0 +1,44 @@
+{
+  "config": {
+    "step": {
+      "confirm": {
+        "title": "玉简（自动发现）",
+        "description": "在网络上发现了电视 {name}，要把它接入 Home Assistant 吗？"
+      },
+      "user": {
+        "title": "玉简（手动）",
+        "description": "填写电视上玉简界面显示的地址与 Token。",
+        "data": {
+          "host": "电视 IP 地址",
+          "port": "端口",
+          "token": "Token",
+          "name": "名称"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "连接不上电视上的玉简服务，请检查 IP、端口与 Token。"
+    },
+    "abort": {
+      "already_configured": "这台电视已经配置过了。",
+      "already_in_progress": "这台电视已经在配置流程里了，去「已发现」里继续即可。",
+      "not_ipv4_address": "只支持 IPv4 地址的电视。",
+      "no_token": "mDNS 广播里没有 Token，无法自动配置。",
+      "not_supported_type": "这不是玉简的 mDNS 广播，已忽略。"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "玉简 设置",
+        "data": {
+          "name": "名称",
+          "host": "电视 IP 地址",
+          "port": "端口",
+          "token": "Token",
+          "duration": "默认横幅秒数"
+        }
+      }
+    }
+  }
+}
