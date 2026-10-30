@@ -1,0 +1,55 @@
+notify:
+  name: 玉简横幅通知
+  description: >-
+    在电视顶部推送一条横幅通知。电视端服务被系统杀掉时，会自动通过 ADB 拉起后重试。
+  fields:
+    message:
+      name: 正文
+      description: 横幅正文，最多四行。
+      required: true
+      example: 晾晒提醒：衣服可以收了
+      selector:
+        text:
+    title:
+      name: 标题
+      description: 横幅标题，可留空。
+      example: 洗衣机已完成
+      selector:
+        text:
+    duration:
+      name: 停留秒数
+      description: 横幅在屏幕上停留的秒数，1–30，默认 5。
+      example: 8
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 30
+          step: 1
+          unit_of_measurement: 秒
+    level:
+      name: 分级
+      description: 决定铃铛与描边的颜色。
+      example: warn
+      default: info
+      selector:
+        select:
+          options:
+            - label: 普通（白）
+              value: info
+            - label: 警告（琥珀）
+              value: warn
+            - label: 错误（红）
+              value: error
+    sticky:
+      name: 常驻
+      description: 勾选后横幅不自动消失，直到被新通知替换或到 maxDuration 上限。
+      default: false
+      selector:
+        boolean:
+    sound:
+      name: 播放提示音
+      description: 横幅入场时是否播放提示音。
+      default: true
+      selector:
+        boolean:
