@@ -11,7 +11,7 @@
 | --- | --- |
 | 自动发现 | mDNS `_yujian._tcp.local.`，TXT 携带 token / 版本 / 路径 / 型号 |
 | 通知实体 | 标准的 `notify` 实体，可用 `notify.send_message` 定向发送 |
-| 便捷服务 | `yujian.notify`，支持 `duration` / `level` / `sticky` / `sound` |
+| 便捷服务 | `yujian.notify`（可带图片 / MJPEG 视频流）与 `yujian.dismiss`（关闭横幅） |
 | 失败自愈 | 电视端服务被系统杀掉时，自动经 ADB 拉起后重试一次 |
 | 健康探活 | 轮询 `GET /health`，实体可用性与属性反映电视真实状态 |
 
@@ -85,6 +85,19 @@ data:
   sticky: true
 ```
 
+带图片或摄像头画面：
+
+```yaml
+action: yujian.notify
+data:
+  title: 门口有人
+  message: 前门检测到移动
+  image: http://192.168.101.20:8080/snapshot.jpg   # 图片 URL
+  # image: /9j/4AAQSkZJRg...                        # 或 base64 内联（摄像头截图输出可直接粘进来）
+  # video: http://192.168.101.20:8080/stream        # 或 MJPEG 流（约 15 帧/秒软解）
+  duration: 15
+```
+
 | 参数 | 取值 | 说明 |
 | --- | --- | --- |
 | `title` | 字符串 | 标题，可留空 |
@@ -92,7 +105,12 @@ data:
 | `duration` | 1–30 秒 | 横幅停留时长，默认 5 |
 | `level` | `info` / `warn` / `error` | 分级着色：白 / 琥珀 / 红 |
 | `sticky` | 布尔 | 是否常驻不自动消失 |
+| `max_duration` | 30–3600 秒 | 常驻兜底消失时间，默认 300 秒，防止横幅永久占屏 |
 | `sound` | 布尔 | 是否播放入场提示音，默认开 |
+| `image` | URL 或 base64 | 横幅上显示的图片；http(s) 地址按 URL 处理，其余按 base64 内联处理 |
+| `video` | MJPEG 流 URL | 横幅上播放 MJPEG 流（multipart/x-mixed-replace）；不支持 mp4 等视频文件 |
+
+另有 `yujian.dismiss` 服务（无参数），立即关闭当前横幅——常驻横幅靠它或 `max_duration` 兜底收回，接口幂等，横幅不在显示时调用也返回成功。
 
 这些参数在 Home Assistant 的自动化编辑器里就是下拉框、数字滑块和开关，可以直接点选，不用手写 YAML。
 
