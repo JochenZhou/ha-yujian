@@ -16,7 +16,9 @@ from .const import (
     DISMISS_PATH_TEMPLATE,
     HEALTH_PATH,
     MAX_DURATION,
+    MAX_MAX_DURATION,
     MIN_DURATION,
+    MIN_MAX_DURATION,
     NOTIFY_PATH_TEMPLATE,
     REVIVE_DELAY_SEC,
     TV_SERVICE,
@@ -27,6 +29,18 @@ _LOGGER = logging.getLogger(__name__)
 
 class YujianError(Exception):
     """Raised when the TV cannot be reached or refuses the request."""
+
+
+def _looks_like_base64(value: str) -> bool:
+    """Tell an inline base64 image from an image URL.
+
+    The TV app accepts both (``image_base64`` vs ``image``). Everything that
+    is not http(s) or a local file path is treated as base64 payload; data
+    URIs, raw base64 and whitespace-wrapped camera snapshots all land here.
+    """
+    head = value.strip()[:2048].lower()
+    return not (head.startswith("http://") or head.startswith("https://")
+                or head.startswith("file://"))
 
 
 class YujianClient:
@@ -98,8 +112,14 @@ class YujianClient:
         sticky: bool | None = None,
         max_duration: int | None = None,
         sound: bool | None = None,
+        image: str | None = None,
+        video: str | None = None,
     ) -> None:
-        """Push a banner to the TV."""
+        """Push a banner to the TV.
+
+        ``image`` is a URL or an inline base64 data string, ``video`` an MJPEG
+        stream URL -- both match the media contract of the TV app (v1.2.2+).
+        """
         payload: dict[str, Any] = {
             "title": title,
             "text": message,
@@ -110,9 +130,15 @@ class YujianClient:
         if sticky is not None:
             payload["sticky"] = sticky
         if max_duration is not None:
-            payload["maxDuration"] = max_duration
+            payload["maxDuration"] = max(
+                MIN_MAX_DURATION, min(MAX_MAX_DURATION, max_duration)
+            )
         if sound is not None:
             payload["sound"] = sound
+        if image:
+            payload["image_base64" if _looks_like_base64(image) else "image"] = image
+        if video:
+            payload["video"] = video
 
         url = f"{self.base_url}{NOTIFY_PATH_TEMPLATE.format(token=self._token)}"
         await self._async_post(url, payload)
