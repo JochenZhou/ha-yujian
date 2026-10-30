@@ -50,3 +50,8 @@ LEGACY_NAMES = ("TVNotify", "电视通知")
 # Banner duration bounds accepted by the TV app.
 MIN_DURATION = 1
 MAX_DURATION = 30
+
+# Bounds of the sticky fallback duration (``maxDuration``) accepted by the
+# TV app: how long a sticky banner may stay up at most.
+MIN_MAX_DURATION = 30
+MAX_MAX_DURATION = 3600
