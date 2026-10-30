@@ -1,11 +1,11 @@
 notify:
   name: 玉简横幅通知
   description: >-
-    在电视顶部推送一条横幅通知。电视端服务被系统杀掉时，会自动通过 ADB 拉起后重试。
+    在电视顶部推送一条横幅通知，可附一张图片或一路 MJPEG 视频流。电视端服务被系统杀掉时，会自动通过 ADB 拉起后重试。
   fields:
     message:
       name: 正文
-      description: 横幅正文，最多四行。
+      description: 横幅正文，最多四行。正文、图片、视频全空时电视端会拒绝。
       required: true
       example: 晾晒提醒：衣服可以收了
       selector:
@@ -43,13 +43,40 @@ notify:
               value: error
     sticky:
       name: 常驻
-      description: 勾选后横幅不自动消失，直到被新通知替换或到 maxDuration 上限。
+      description: 勾选后横幅不自动消失，直到被新通知替换、调用 yujian.dismiss 或到 max_duration 上限。
       default: false
       selector:
         boolean:
+    max_duration:
+      name: 常驻上限秒数
+      description: 常驻横幅的兜底消失时间，30–3600 秒，默认 300 秒。防止推送方异常后横幅永久占屏。
+      example: 300
+      default: 300
+      selector:
+        number:
+          min: 30
+          max: 3600
+          step: 30
+          unit_of_measurement: 秒
     sound:
       name: 播放提示音
       description: 横幅入场时是否播放提示音。
       default: true
       selector:
         boolean:
+    image:
+      name: 图片
+      description: 图片地址（http(s) URL）或 base64 内联图片；摄像头截图可以接到 camera.snapshot 的输出。
+      example: https://example.com/doorbell.jpg
+      selector:
+        text:
+    video:
+      name: 视频（MJPEG 流）
+      description: MJPEG 流地址（multipart/x-mixed-replace），例如摄像头的 MJPEG 子码流；App 以约 15 帧/秒软解显示。不支持 mp4 等普通视频文件。
+      example: http://192.168.101.20:8080/stream
+      selector:
+        text:
+dismiss:
+  name: 玉简关闭横幅
+  description: >-
+    立即关闭当前显示的横幅。接口是幂等的：没有横幅在显示时调用也返回成功。
