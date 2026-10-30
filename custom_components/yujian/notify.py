@@ -104,6 +104,9 @@ class YujianNotifyEntity(NotifyEntity):
         level: str | None = None,
         sound: bool | None = None,
         sticky: bool | None = None,
+        max_duration: int | None = None,
+        image: str | None = None,
+        video: str | None = None,
     ) -> None:
         """Push a banner, reviving the TV app once if the first attempt fails."""
         try:
@@ -114,6 +117,9 @@ class YujianNotifyEntity(NotifyEntity):
                 level=level,
                 sound=sound,
                 sticky=sticky,
+                max_duration=max_duration,
+                image=image,
+                video=video,
             )
         except YujianError as err:
             _LOGGER.debug("第一次推送失败，尝试拉起电视上的服务后重试: %s", err)
@@ -127,11 +133,21 @@ class YujianNotifyEntity(NotifyEntity):
                     level=level,
                     sound=sound,
                     sticky=sticky,
+                    max_duration=max_duration,
+                    image=image,
+                    video=video,
                 )
             except YujianError as retry_err:
                 raise HomeAssistantError(
                     f"拉起服务后仍然无法推送通知: {retry_err}"
                 ) from retry_err
+
+    async def async_dismiss(self) -> None:
+        """Close the banner currently shown on the TV."""
+        try:
+            await self._client.async_dismiss()
+        except YujianError as err:
+            raise HomeAssistantError(f"关闭电视上的横幅失败: {err}") from err
 
     async def async_send_message(self, message: str, title: str | None = None) -> None:
         """Send a banner to the TV."""
