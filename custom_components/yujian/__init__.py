@@ -21,7 +21,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_TOKEN, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 
 from .client import YujianClient, YujianError
@@ -44,8 +44,13 @@ SERVICE_SCHEMA = vol.Schema(
         vol.Optional("level"): vol.In(("info", "warn", "error")),
         vol.Optional("sticky"): cv.boolean,
         vol.Optional("sound"): cv.boolean,
+        vol.Optional("max_duration"): vol.All(vol.Coerce(int), vol.Range(min=30, max=3600)),
+        vol.Optional("image"): cv.string,
+        vol.Optional("video"): cv.string,
     }
 )
+
+SERVICE_DISMISS = "dismiss"
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -87,8 +92,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
         if not hass.data.get(DOMAIN):
             hass.data.pop(DOMAIN, None)
-            if hass.services.has_service(DOMAIN, SERVICE_NOTIFY):
-                hass.services.async_remove(DOMAIN, SERVICE_NOTIFY)
+            for svc in (SERVICE_NOTIFY, SERVICE_DISMISS):
+                if hass.services.has_service(DOMAIN, svc):
+                    hass.services.async_remove(DOMAIN, svc)
     return unloaded
 
 
@@ -126,15 +132,34 @@ def _async_register_service(hass: HomeAssistant) -> None:
             entity = entry_data.get("entity")
             if entity is None:
                 continue
-            await entity.async_push(
-                title=title,
-                message=message,
-                duration=call.data.get("duration", entity.default_duration),
-                level=call.data.get("level"),
-                sound=call.data.get("sound"),
-                sticky=call.data.get("sticky"),
-            )
+            # One offline TV must not abort the push to the others.
+            try:
+                await entity.async_push(
+                    title=title,
+                    message=message,
+                    duration=call.data.get("duration", entity.default_duration),
+                    level=call.data.get("level"),
+                    sound=call.data.get("sound"),
+                    sticky=call.data.get("sticky"),
+                    max_duration=call.data.get("max_duration"),
+                    image=call.data.get("image"),
+                    video=call.data.get("video"),
+                )
+            except HomeAssistantError as err:
+                _LOGGER.warning("推送到 %s 失败: %s", entity.entity_id, err)
+
+    async def _async_handle_dismiss(call: ServiceCall) -> None:
+        """Close the banner currently shown on every configured TV."""
+        for entry_data in hass.data.get(DOMAIN, {}).values():
+            entity = entry_data.get("entity")
+            if entity is None:
+                continue
+            try:
+                await entity.async_dismiss()
+            except HomeAssistantError as err:
+                _LOGGER.warning("关闭 %s 的横幅失败: %s", entity.entity_id, err)
 
     hass.services.async_register(
         DOMAIN, SERVICE_NOTIFY, _async_handle_notify, schema=SERVICE_SCHEMA
     )
+    hass.services.async_register(DOMAIN, SERVICE_DISMISS, _async_handle_dismiss)
