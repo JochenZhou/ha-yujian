@@ -7,6 +7,9 @@
   "services": {
     "notify": {
       "service": "mdi:television-classic"
+    },
+    "dismiss": {
+      "service": "mdi:close-box-outline"
     }
   }
 }
