@@ -9,7 +9,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigFlowResult, OptionsFlow
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_TOKEN
 
-from .const import DEFAULT_DURATION, DEFAULT_PORT
+from .const import DEFAULT_DURATION, DEFAULT_PORT, DISPLAY_NAME
 
 
 class YujianOptionsFlow(OptionsFlow):
