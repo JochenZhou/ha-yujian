@@ -25,7 +25,7 @@ from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 
 from .client import YujianClient, YujianError
-from .const import DISPLAY_NAME, DOMAIN, LEGACY_NAMES
+from .const import BANNER_POSITIONS, DISPLAY_NAME, DOMAIN, LEGACY_NAMES
 from .coordinator import YujianCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -47,10 +47,25 @@ SERVICE_SCHEMA = vol.Schema(
         vol.Optional("max_duration"): vol.All(vol.Coerce(int), vol.Range(min=30, max=3600)),
         vol.Optional("image"): cv.string,
         vol.Optional("video"): cv.string,
+        vol.Optional("notify_id"): cv.string,
+        vol.Optional("position"): vol.In(BANNER_POSITIONS),
+        vol.Optional("tts"): vol.Any(cv.boolean, cv.string),
+        vol.Optional("image_interval"): vol.All(vol.Coerce(int), vol.Range(min=1, max=10)),
+        vol.Optional("queue"): cv.boolean,
     }
 )
 
 SERVICE_DISMISS = "dismiss"
+
+# Push the TV's own do-not-disturb switch and default banner position.
+SERVICE_SET_CONFIG = "set_config"
+
+SET_CONFIG_SCHEMA = vol.Schema(
+    {
+        vol.Optional("muted"): cv.boolean,
+        vol.Optional("position"): vol.In(BANNER_POSITIONS),
+    }
+)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -92,7 +107,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
         if not hass.data.get(DOMAIN):
             hass.data.pop(DOMAIN, None)
-            for svc in (SERVICE_NOTIFY, SERVICE_DISMISS):
+            for svc in (SERVICE_NOTIFY, SERVICE_DISMISS, SERVICE_SET_CONFIG):
                 if hass.services.has_service(DOMAIN, svc):
                     hass.services.async_remove(DOMAIN, svc)
     return unloaded
@@ -140,6 +155,11 @@ def _async_register_service(hass: HomeAssistant) -> None:
                 "max_duration": call.data.get("max_duration"),
                 "image": call.data.get("image"),
                 "video": call.data.get("video"),
+                "notify_id": call.data.get("notify_id"),
+                "position": call.data.get("position"),
+                "tts": call.data.get("tts"),
+                "image_interval": call.data.get("image_interval"),
+                "queue": call.data.get("queue"),
             }
             # Push through the notify platform's own entry point so it records
             # the "last notified" timestamp -- that timestamp *is* the entity
@@ -166,7 +186,32 @@ def _async_register_service(hass: HomeAssistant) -> None:
             except HomeAssistantError as err:
                 _LOGGER.warning("关闭 %s 的横幅失败: %s", entity.entity_id, err)
 
+    async def _async_handle_set_config(call: ServiceCall) -> None:
+        """Push mute / default-position changes to every configured TV."""
+        for entry_data in hass.data.get(DOMAIN, {}).values():
+            client = entry_data.get("client")
+            coordinator = entry_data.get("coordinator")
+            if client is None:
+                continue
+            try:
+                result = await client.async_set_config(
+                    muted=call.data.get("muted"),
+                    position=call.data.get("position"),
+                )
+            except YujianError as err:
+                _LOGGER.warning("设置 %s 的电视配置失败: %s", client.host, err)
+                continue
+            # The endpoint echoes the TV's real state -- merge it in so the
+            # entity reflects the change immediately (no poll cooldown wait).
+            if coordinator is not None and isinstance(result, dict) and result:
+                merged = dict(coordinator.data or {})
+                merged.update({k: v for k, v in result.items() if k != "ok"})
+                coordinator.async_set_updated_data(merged)
+
     hass.services.async_register(
         DOMAIN, SERVICE_NOTIFY, _async_handle_notify, schema=SERVICE_SCHEMA
     )
     hass.services.async_register(DOMAIN, SERVICE_DISMISS, _async_handle_dismiss)
+    hass.services.async_register(
+        DOMAIN, SERVICE_SET_CONFIG, _async_handle_set_config, schema=SET_CONFIG_SCHEMA
+    )

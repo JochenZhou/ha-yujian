@@ -76,7 +76,84 @@ notify:
       example: http://192.168.101.20:8080/stream
       selector:
         text:
+    position:
+      name: 显示位置
+      description: 覆盖电视端的默认方位。留空表示沿用电视上的默认设置（顶边通栏）。四角为画中画小窗样式。
+      example: bottom-right
+      selector:
+        select:
+          options:
+            - label: 顶边通栏（默认）
+              value: top
+            - label: 底边通栏
+              value: bottom
+            - label: 左上角小窗
+              value: top-left
+            - label: 右上角小窗
+              value: top-right
+            - label: 左下角小窗
+              value: bottom-left
+            - label: 右下角小窗
+              value: bottom-right
+    tts:
+      name: 语音播报
+      description: 打开则朗读标题与正文；也可以填一段自定义文本，只读这段（正文照常显示）。
+      example: 门口有人，请查看
+      selector:
+        text:
+    queue:
+      name: 排队展示
+      description: 勾选后，如果当前已有横幅在展示，这条会排在后面依次播放，而不是抢先顶掉它。
+      default: false
+      selector:
+        boolean:
+    notify_id:
+      name: 通知标识
+      description: 同一条标识再次推送时，会在原横幅上平滑更新文案与倒计时（不会重新入场闪烁）。适合倒计时、进度这类高频刷新。
+      example: washer-progress
+      selector:
+        text:
+    image_interval:
+      name: 图片刷新秒数
+      description: 仅对图片生效。设置后电视会按该间隔重新拉取图片地址，把静态快照变成准视频流（1–10 秒）。
+      example: 2
+      selector:
+        number:
+          min: 1
+          max: 10
+          step: 1
+          unit_of_measurement: 秒
 dismiss:
   name: 玉简关闭横幅
   description: >-
     立即关闭当前显示的横幅。接口是幂等的：没有横幅在显示时调用也返回成功。
+set_config:
+  name: 玉简电视设置
+  description: >-
+    调整电视端的「闭关免扰」（静音，不再弹横幅）与默认显示位置。两项都可只改其一，改完立即回读电视真实状态。
+  fields:
+    muted:
+      name: 闭关免扰
+      description: 打开后电视不再显示横幅（相当于静音开关）。
+      default: false
+      selector:
+        boolean:
+    position:
+      name: 默认显示位置
+      description: 电视端新横幅的默认方位，影响不指定 position 的推送。
+      example: top
+      selector:
+        select:
+          options:
+            - label: 顶边通栏
+              value: top
+            - label: 底边通栏
+              value: bottom
+            - label: 左上角小窗
+              value: top-left
+            - label: 右上角小窗
+              value: top-right
+            - label: 左下角小窗
+              value: bottom-left
+            - label: 右下角小窗
+              value: bottom-right

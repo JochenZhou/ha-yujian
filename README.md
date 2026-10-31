@@ -11,7 +11,8 @@
 | --- | --- |
 | 自动发现 | mDNS `_yujian._tcp.local.`，TXT 携带 token / 版本 / 路径 / 型号 |
 | 通知实体 | 标准的 `notify` 实体，可用 `notify.send_message` 定向发送 |
-| 便捷服务 | `yujian.notify`（可带图片 / MJPEG 视频流）与 `yujian.dismiss`（关闭横幅） |
+| 便捷服务 | `yujian.notify`（图片 / MJPEG / 方位 / TTS / 排队 / 幂等刷新）、`yujian.dismiss`、`yujian.set_config` |
+| 状态回读 | 实体属性带 `muted`、`position`、`banner`，以及传音简录里上一条通知的内容与时间 |
 | 失败自愈 | 电视端服务被系统杀掉时，自动经 ADB 拉起后重试一次 |
 | 健康探活 | 轮询 `GET /health`，实体可用性与属性反映电视真实状态 |
 
@@ -109,8 +110,51 @@ data:
 | `sound` | 布尔 | 是否播放入场提示音，默认开 |
 | `image` | URL 或 base64 | 横幅上显示的图片；http(s) 地址按 URL 处理，其余按 base64 内联处理 |
 | `video` | MJPEG 流 URL | 横幅上播放 MJPEG 流（multipart/x-mixed-replace）；不支持 mp4 等视频文件 |
+| `position` | 六个方位 | `top` / `bottom` / `top-left` / `top-right` / `bottom-left` / `bottom-right`；留空沿用电视默认。四角是画中画小窗样式 |
+| `tts` | 布尔或文本 | 打开（`true`）朗读标题与正文；填文本则只读这段，正文照常显示 |
+| `queue` | 布尔 | 已有横幅在显示时，这条排队顺延播放，不抢占顶替 |
+| `notify_id` | 字符串 | 同一标识再次推送时在原横幅上平滑更新文案与倒计时，不重新入场闪烁 |
+| `image_interval` | 1–10 秒 | 仅对图片生效，按该间隔重新拉取图片地址，把静态快照变成准视频流 |
 
-另有 `yujian.dismiss` 服务（无参数），立即关闭当前横幅——常驻横幅靠它或 `max_duration` 兜底收回，接口幂等，横幅不在显示时调用也返回成功。
+另有三个配套服务：
+
+- `yujian.dismiss`（无参数）：立即关闭当前横幅，幂等。
+- `yujian.set_config`：`muted`（闭关免扰，不弹横幅）/ `position`（电视端默认方位），两项可只改其一，改完立即回读电视真实状态。
+- 实体属性会实时反映电视状态：`version`、`muted`、`position`、`banner`、`history_count`，以及上一条通知的 `last_title` / `last_text` / `last_level` / `last_has_media` / `last_notified_at`（来自 App 的「传音简录」）。
+
+常用组合：
+
+```yaml
+# 门口有人：右下角小窗 + 语音播报 + 图片定时刷新
+action: yujian.notify
+data:
+  title: 门口有人
+  message: 前门检测到移动
+  position: bottom-right
+  tts: true
+  image: http://192.168.101.20:8080/snapshot.jpg
+  image_interval: 2
+  duration: 20
+
+# 洗衣机进度：同 id 高频刷新，不闪
+action: yujian.notify
+data:
+  message: "洗涤中 {{ states('sensor.washer_progress') }}%"
+  notify_id: washer-progress
+  duration: 30
+  sticky: true
+
+# 多条消息依次播放，不互相顶掉
+action: yujian.notify
+data:
+  message: 快递已放前台
+  queue: true
+
+# 睡前打开闭关免扰
+action: yujian.set_config
+data:
+  muted: true
+```
 
 这些参数在 Home Assistant 的自动化编辑器里就是下拉框、数字滑块和开关，可以直接点选，不用手写 YAML。
 

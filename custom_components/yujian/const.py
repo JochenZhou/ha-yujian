@@ -27,6 +27,12 @@ HEALTH_PATH = "/health"
 # Path of the token-protected dismiss endpoint: POST /{token}/dismiss
 DISMISS_PATH_TEMPLATE = "/{token}/dismiss"
 
+# Path of the recent-notifications endpoint: GET /{token}/history (App v1.3.0+)
+HISTORY_PATH_TEMPLATE = "/{token}/history"
+
+# Path of the live-config endpoint: POST /{token}/config (App v1.3.0+)
+CONFIG_PATH_TEMPLATE = "/{token}/config"
+
 # Android package / component of the app on the TV, used to revive it via
 # ADB. These belong to the installed app and must not be renamed here.
 TV_PACKAGE = "com.zqc.tvnotify"
@@ -55,3 +61,19 @@ MAX_DURATION = 30
 # TV app: how long a sticky banner may stay up at most.
 MIN_MAX_DURATION = 30
 MAX_MAX_DURATION = 3600
+
+# Bounds of the static-image refresh interval, in seconds. The app accepts
+# 1..10 seconds (values above 10 are treated as raw milliseconds there).
+MIN_IMAGE_INTERVAL = 1
+MAX_IMAGE_INTERVAL = 10
+
+# Banner positions accepted by the app (``position`` in the notify payload and
+# in the config endpoint). An empty value means "inherit the TV's default".
+BANNER_POSITIONS = (
+    "top",
+    "bottom",
+    "top-left",
+    "top-right",
+    "bottom-left",
+    "bottom-right",
+)

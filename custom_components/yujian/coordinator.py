@@ -1,7 +1,8 @@
 """Coordinator for the 玉简 integration.
 
 Keeps the last health payload of the TV so the notify entity can report
-availability and expose the TV's version / uptime / banner state.
+availability and expose the TV's version / uptime / banner state / mute state /
+default banner position, plus the newest entry of the TV's notification history.
 """
 
 from __future__ import annotations
@@ -39,8 +40,21 @@ class YujianCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.client = client
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """Fetch the health payload."""
+        """Fetch the health payload, plus the newest history entry (best effort).
+
+        The history endpoint only exists on app v1.3.0+, so a failure there must
+        never make the entity look unavailable -- it is merged in as ``None``.
+        """
         try:
-            return await self.client.async_health()
+            data = dict(await self.client.async_health())
         except YujianError as err:
             raise UpdateFailed(str(err)) from err
+
+        try:
+            history = await self.client.async_history()
+        except YujianError as err:
+            _LOGGER.debug("读取传音简录失败（旧版 App 不支持该接口）: %s", err)
+            history = []
+        data["last_notification"] = history[0] if history else None
+        data["history_count"] = len(history)
+        return data

@@ -10,6 +10,9 @@
     },
     "dismiss": {
       "service": "mdi:close-box-outline"
+    },
+    "set_config": {
+      "service": "mdi:tune-variant"
     }
   }
 }

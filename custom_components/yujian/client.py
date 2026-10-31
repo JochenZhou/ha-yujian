@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from typing import Any
 
@@ -12,12 +13,16 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
+    CONFIG_PATH_TEMPLATE,
     DEFAULT_DURATION,
     DISMISS_PATH_TEMPLATE,
     HEALTH_PATH,
+    HISTORY_PATH_TEMPLATE,
     MAX_DURATION,
+    MAX_IMAGE_INTERVAL,
     MAX_MAX_DURATION,
     MIN_DURATION,
+    MIN_IMAGE_INTERVAL,
     MIN_MAX_DURATION,
     NOTIFY_PATH_TEMPLATE,
     REVIVE_DELAY_SEC,
@@ -114,11 +119,25 @@ class YujianClient:
         sound: bool | None = None,
         image: str | None = None,
         video: str | None = None,
+        notify_id: str | None = None,
+        position: str | None = None,
+        tts: bool | str | None = None,
+        image_interval: int | None = None,
+        queue: bool | None = None,
     ) -> None:
         """Push a banner to the TV.
 
         ``image`` is a URL or an inline base64 data string, ``video`` an MJPEG
         stream URL -- both match the media contract of the TV app (v1.2.2+).
+        The remaining arguments mirror the app v1.3.0 additions:
+
+        * ``notify_id``: reuse the same id to update a showing banner in place
+          (no re-entry animation).
+        * ``position``: top / bottom / top-left / top-right / bottom-left /
+          bottom-right; omit to inherit the TV's default position.
+        * ``tts``: ``True`` speaks title + text, a string speaks that string.
+        * ``image_interval``: seconds between refreshes of a static image URL.
+        * ``queue``: enqueue behind the showing banner instead of replacing it.
         """
         payload: dict[str, Any] = {
             "title": title,
@@ -139,17 +158,52 @@ class YujianClient:
             payload["image_base64" if _looks_like_base64(image) else "image"] = image
         if video:
             payload["video"] = video
+        if notify_id:
+            payload["id"] = notify_id
+        if position:
+            payload["position"] = position
+        if tts is not None and tts != "":
+            payload["tts"] = tts
+        if image_interval:
+            payload["image_interval"] = max(
+                MIN_IMAGE_INTERVAL, min(MAX_IMAGE_INTERVAL, image_interval)
+            )
+        if queue is not None:
+            payload["queue"] = queue
 
         url = f"{self.base_url}{NOTIFY_PATH_TEMPLATE.format(token=self._token)}"
         await self._async_post(url, payload)
+
+    async def async_history(self) -> list[dict[str, Any]]:
+        """Return the TV's recent notifications (app v1.3.0+, newest first)."""
+        url = f"{self.base_url}{HISTORY_PATH_TEMPLATE.format(token=self._token)}"
+        data = await self._async_get(url)
+        if isinstance(data, list):
+            return [item for item in data if isinstance(item, dict)]
+        return []
+
+    async def async_set_config(
+        self,
+        muted: bool | None = None,
+        position: str | None = None,
+    ) -> dict[str, Any]:
+        """Change the TV's do-not-disturb switch and/or default banner position."""
+        payload: dict[str, Any] = {}
+        if muted is not None:
+            payload["muted"] = muted
+        if position:
+            payload["position"] = position
+        url = f"{self.base_url}{CONFIG_PATH_TEMPLATE.format(token=self._token)}"
+        data = await self._async_post(url, payload)
+        return data if isinstance(data, dict) else {}
 
     async def async_dismiss(self) -> None:
         """Close the banner currently shown on the TV."""
         url = f"{self.base_url}{DISMISS_PATH_TEMPLATE.format(token=self._token)}"
         await self._async_post(url, {})
 
-    async def _async_post(self, url: str, payload: dict[str, Any]) -> None:
-        """POST JSON and raise on any non-2xx answer."""
+    async def _async_post(self, url: str, payload: dict[str, Any]) -> Any:
+        """POST JSON, raise on any non-2xx answer, return the decoded body."""
         session = async_get_clientsession(self._hass)
         try:
             async with session.post(
@@ -163,6 +217,27 @@ class YujianClient:
                     raise YujianError(f"HTTP {resp.status}: {body[:200]}")
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
             raise YujianError(str(err)) from err
+        try:
+            return json.loads(body)
+        except ValueError:
+            return None
+
+    async def _async_get(self, url: str) -> Any:
+        """GET and decode a JSON body, raise on any non-2xx answer."""
+        session = async_get_clientsession(self._hass)
+        try:
+            async with session.get(
+                url, timeout=aiohttp.ClientTimeout(total=10)
+            ) as resp:
+                body = await resp.text()
+                if resp.status != 200:
+                    raise YujianError(f"HTTP {resp.status}: {body[:200]}")
+        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+            raise YujianError(str(err)) from err
+        try:
+            return json.loads(body)
+        except ValueError as err:
+            raise YujianError(f"响应不是合法 JSON: {body[:120]}") from err
 
     # ------------------------------------------------------------------
     # Self healing

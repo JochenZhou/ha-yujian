@@ -18,6 +18,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .client import YujianClient, YujianError
 from .const import DEFAULT_DURATION, DISPLAY_NAME, DOMAIN, LEGACY_NAMES
@@ -41,7 +43,7 @@ async def async_setup_entry(
     entry_data["entity"] = entity
 
 
-class YujianNotifyEntity(NotifyEntity):
+class YujianNotifyEntity(CoordinatorEntity[YujianCoordinator], NotifyEntity):
     """A TV that can show notification banners."""
 
     _attr_should_poll = False
@@ -54,8 +56,10 @@ class YujianNotifyEntity(NotifyEntity):
         client: YujianClient,
     ) -> None:
         """Initialize the entity."""
+        # CoordinatorEntity gives us availability + state writes on every poll,
+        # which is what keeps mute/position/history attributes fresh.
+        super().__init__(coordinator)
         self._entry = entry
-        self._coordinator = coordinator
         self._client = client
         # Entries created before v1.3.0 stored an older name here (the mDNS
         # instance name like "TVNotify-tyeq", or "电视通知"); show the current
@@ -76,11 +80,6 @@ class YujianNotifyEntity(NotifyEntity):
         )
 
     @property
-    def available(self) -> bool:
-        """Return whether the TV is reachable."""
-        return self._coordinator.last_update_success
-
-    @property
     def default_duration(self) -> int:
         """Return the default banner duration in seconds."""
         raw = self._entry.options.get("duration", DEFAULT_DURATION)
@@ -91,10 +90,23 @@ class YujianNotifyEntity(NotifyEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return the TV's health payload as attributes."""
-        if self._coordinator.data is None:
+        """Expose the TV's live state: version, mute, banner position, history."""
+        data = self.coordinator.data
+        if not data:
             return {}
-        return dict(self._coordinator.data)
+        attrs = dict(data)
+        last = attrs.get("last_notification")
+        if isinstance(last, dict):
+            # Flatten the newest history entry so automations can read it.
+            attrs["last_title"] = last.get("title")
+            attrs["last_text"] = last.get("text")
+            attrs["last_level"] = last.get("level")
+            attrs["last_has_media"] = last.get("hasMedia")
+            attrs["last_tts"] = last.get("tts")
+            ts = last.get("timestamp")
+            if isinstance(ts, (int, float)):
+                attrs["last_notified_at"] = dt_util.utc_from_timestamp(ts / 1000).isoformat()
+        return attrs
 
     async def async_push(
         self,
@@ -107,36 +119,37 @@ class YujianNotifyEntity(NotifyEntity):
         max_duration: int | None = None,
         image: str | None = None,
         video: str | None = None,
+        notify_id: str | None = None,
+        position: str | None = None,
+        tts: bool | str | None = None,
+        image_interval: int | None = None,
+        queue: bool | None = None,
     ) -> None:
         """Push a banner, reviving the TV app once if the first attempt fails."""
+        kwargs = {
+            "title": title,
+            "message": message,
+            "duration": duration,
+            "level": level,
+            "sound": sound,
+            "sticky": sticky,
+            "max_duration": max_duration,
+            "image": image,
+            "video": video,
+            "notify_id": notify_id,
+            "position": position,
+            "tts": tts,
+            "image_interval": image_interval,
+            "queue": queue,
+        }
         try:
-            await self._client.async_notify(
-                title=title,
-                message=message,
-                duration=duration,
-                level=level,
-                sound=sound,
-                sticky=sticky,
-                max_duration=max_duration,
-                image=image,
-                video=video,
-            )
+            await self._client.async_notify(**kwargs)
         except YujianError as err:
             _LOGGER.debug("第一次推送失败，尝试拉起电视上的服务后重试: %s", err)
             if not await self._client.async_revive():
                 raise HomeAssistantError(f"电视上的玉简服务不可用: {err}") from err
             try:
-                await self._client.async_notify(
-                    title=title,
-                    message=message,
-                    duration=duration,
-                    level=level,
-                    sound=sound,
-                    sticky=sticky,
-                    max_duration=max_duration,
-                    image=image,
-                    video=video,
-                )
+                await self._client.async_notify(**kwargs)
             except YujianError as retry_err:
                 raise HomeAssistantError(
                     f"拉起服务后仍然无法推送通知: {retry_err}"
@@ -155,9 +168,10 @@ class YujianNotifyEntity(NotifyEntity):
         """Send a banner to the TV.
 
         ``kwargs`` carries the integration's own extras (duration / level /
-        sticky / sound / max_duration / image / video) when the convenience
-        service pushes through the platform entry point; the plain
-        ``notify.send_message`` service passes none of them.
+        sticky / sound / max_duration / image / video / position / tts /
+        queue / notify_id / image_interval) when the convenience service pushes
+        through the platform entry point; the plain ``notify.send_message``
+        service passes none of them.
         """
         await self.async_push(
             title=title or "",
@@ -169,4 +183,9 @@ class YujianNotifyEntity(NotifyEntity):
             max_duration=kwargs.get("max_duration"),
             image=kwargs.get("image"),
             video=kwargs.get("video"),
+            notify_id=kwargs.get("notify_id"),
+            position=kwargs.get("position"),
+            tts=kwargs.get("tts"),
+            image_interval=kwargs.get("image_interval"),
+            queue=kwargs.get("queue"),
         )
