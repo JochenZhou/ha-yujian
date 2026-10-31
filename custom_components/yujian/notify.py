@@ -149,6 +149,24 @@ class YujianNotifyEntity(NotifyEntity):
         except YujianError as err:
             raise HomeAssistantError(f"关闭电视上的横幅失败: {err}") from err
 
-    async def async_send_message(self, message: str, title: str | None = None) -> None:
-        """Send a banner to the TV."""
-        await self.async_push(title=title or "", message=message)
+    async def async_send_message(
+        self, message: str, title: str | None = None, **kwargs: Any
+    ) -> None:
+        """Send a banner to the TV.
+
+        ``kwargs`` carries the integration's own extras (duration / level /
+        sticky / sound / max_duration / image / video) when the convenience
+        service pushes through the platform entry point; the plain
+        ``notify.send_message`` service passes none of them.
+        """
+        await self.async_push(
+            title=title or "",
+            message=message,
+            duration=kwargs.get("duration", self.default_duration),
+            level=kwargs.get("level"),
+            sound=kwargs.get("sound"),
+            sticky=kwargs.get("sticky"),
+            max_duration=kwargs.get("max_duration"),
+            image=kwargs.get("image"),
+            video=kwargs.get("video"),
+        )
