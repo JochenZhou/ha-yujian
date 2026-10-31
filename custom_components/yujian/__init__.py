@@ -132,19 +132,26 @@ def _async_register_service(hass: HomeAssistant) -> None:
             entity = entry_data.get("entity")
             if entity is None:
                 continue
-            # One offline TV must not abort the push to the others.
+            extras = {
+                "duration": call.data.get("duration", entity.default_duration),
+                "level": call.data.get("level"),
+                "sound": call.data.get("sound"),
+                "sticky": call.data.get("sticky"),
+                "max_duration": call.data.get("max_duration"),
+                "image": call.data.get("image"),
+                "video": call.data.get("video"),
+            }
+            # Push through the notify platform's own entry point so it records
+            # the "last notified" timestamp -- that timestamp *is* the entity
+            # state. Calling async_push() directly would send the banner but
+            # leave the entity state stuck at "unknown".
+            send = getattr(entity, "_async_send_message", None)
             try:
-                await entity.async_push(
-                    title=title,
-                    message=message,
-                    duration=call.data.get("duration", entity.default_duration),
-                    level=call.data.get("level"),
-                    sound=call.data.get("sound"),
-                    sticky=call.data.get("sticky"),
-                    max_duration=call.data.get("max_duration"),
-                    image=call.data.get("image"),
-                    video=call.data.get("video"),
-                )
+                if send is not None:
+                    await send(message=message, title=title, **extras)
+                else:  # pragma: no cover - fallback if HA renames the hook
+                    await entity.async_push(title=title, message=message, **extras)
+            # One offline TV must not abort the push to the others.
             except HomeAssistantError as err:
                 _LOGGER.warning("推送到 %s 失败: %s", entity.entity_id, err)
 
