@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from urllib.parse import urlparse
 
 import voluptuous as vol
 
@@ -23,12 +24,63 @@ _LOGGER = logging.getLogger(__name__)
 
 USER_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_HOST): str,
+        vol.Optional("link"): str,
+        vol.Optional(CONF_HOST): str,
         vol.Optional(CONF_PORT, default=DEFAULT_PORT): vol.Coerce(int),
-        vol.Required(CONF_TOKEN): str,
+        vol.Optional(CONF_TOKEN): str,
         vol.Optional(CONF_NAME, default=DISPLAY_NAME): str,
     }
 )
+
+
+def parse_link(raw: str) -> dict[str, Any] | None:
+    """Pull host / port / token out of a copied 玉简 link.
+
+    Accepts what the app and its web console hand out:
+    ``http://192.168.1.5:8791/abc123/notify``, ``.../abc123``, ``.../abc123/``,
+    ``192.168.1.5:8791/abc123`` and a bare ``abc123`` token (host then has to
+    come from the fields). Returns None when nothing usable is in there.
+    """
+    text = (raw or "").strip()
+    if not text:
+        return None
+    # tolerate pasted markdown / quoting noise
+    text = text.strip("<>\"'` ").split()[0] if text.split() else text
+
+    if "://" not in text:
+        text = "http://" + text
+
+    try:
+        parsed = urlparse(text)
+    except ValueError:
+        return None
+
+    host = parsed.hostname or ""
+    token = ""
+    for segment in (parsed.path or "").split("/"):
+        segment = segment.strip()
+        if not segment:
+            continue
+        if segment in ("notify", "dismiss", "history", "config", "ui", "stream", "health"):
+            continue
+        token = segment
+        break
+
+    if not token and host and not parsed.port:
+        # "http://abc123" style: the single label is the token, not a host
+        token, host = host, ""
+
+    if not host and not token:
+        return None
+
+    result: dict[str, Any] = {}
+    if host:
+        result[CONF_HOST] = host
+    if parsed.port:
+        result[CONF_PORT] = parsed.port
+    if token:
+        result[CONF_TOKEN] = token
+    return result or None
 
 
 def _prop(properties: dict[str, Any], key: str) -> str | None:
@@ -126,50 +178,71 @@ class YujianConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Handle a manual setup (no mDNS available)."""
+        """Handle a manual setup (no mDNS available).
+
+        The App shows a "copy call address" button that yields
+        ``http://<ip>:<port>/<token>/notify``; pasting it into the ``link``
+        field is enough -- host, port and token are parsed out of it. The
+        individual fields still work for people who prefer typing them.
+        """
         errors: dict[str, str] = {}
+        placeholders: dict[str, str] = {}
+        suggested = dict(user_input or {})
 
         if user_input is not None:
-            host = user_input[CONF_HOST].strip()
-            token = user_input[CONF_TOKEN].strip()
-            port = user_input[CONF_PORT]
-            name = user_input.get(CONF_NAME) or DISPLAY_NAME
+            parsed = parse_link(user_input.get("link") or "")
+            if parsed:
+                suggested.update(parsed)
+            elif (user_input.get("link") or "").strip():
+                errors["link"] = "invalid_link"
 
-            # raise_on_progress=False: a pending zeroconf discovery for the
-            # same TV must not block a manual setup the user started on
-            # purpose (same as the Sonos integration does).
-            await self.async_set_unique_id(host, raise_on_progress=False)
-            self._abort_if_unique_id_configured(
-                updates={
-                    CONF_HOST: host,
-                    CONF_PORT: port,
-                    CONF_TOKEN: token,
-                }
-            )
+            host = (user_input.get(CONF_HOST) or "").strip() or (parsed or {}).get(CONF_HOST, "")
+            token = (user_input.get(CONF_TOKEN) or "").strip() or (parsed or {}).get(CONF_TOKEN, "")
+            port = user_input.get(CONF_PORT) or (parsed or {}).get(CONF_PORT) or DEFAULT_PORT
+            name = (user_input.get(CONF_NAME) or "").strip() or DISPLAY_NAME
 
-            from .client import YujianClient, YujianError
+            if "link" not in errors and (not host or not token):
+                errors["base"] = "missing_fields"
 
-            client = YujianClient(self.hass, host, port, token)
-            try:
-                await client.async_health()
-            except YujianError as err:
-                errors["base"] = "cannot_connect"
-                _LOGGER.debug("手动配置时健康检查失败: %s", err)
-            else:
-                return self.async_create_entry(
-                    title=name,
-                    data={
+            if not errors:
+                # raise_on_progress=False: a pending zeroconf discovery for the
+                # same TV must not block a manual setup the user started on
+                # purpose (same as the Sonos integration does).
+                await self.async_set_unique_id(host, raise_on_progress=False)
+                self._abort_if_unique_id_configured(
+                    updates={
                         CONF_HOST: host,
                         CONF_PORT: port,
                         CONF_TOKEN: token,
-                        CONF_NAME: name,
-                    },
+                    }
                 )
+
+                from .client import YujianClient, YujianError
+
+                client = YujianClient(self.hass, host, port, token)
+                try:
+                    await client.async_health()
+                except YujianError as err:
+                    errors["base"] = "cannot_connect"
+                    _LOGGER.debug("手动配置时健康检查失败: %s", err)
+                else:
+                    return self.async_create_entry(
+                        title=name,
+                        data={
+                            CONF_HOST: host,
+                            CONF_PORT: port,
+                            CONF_TOKEN: token,
+                            CONF_NAME: name,
+                        },
+                    )
+                placeholders = {"host": host, "port": str(port)}
 
         return self.async_show_form(
             step_id="user",
             data_schema=USER_SCHEMA,
             errors=errors,
+            description_placeholders=placeholders or None,
+            last_step=True,
         )
 
     @staticmethod

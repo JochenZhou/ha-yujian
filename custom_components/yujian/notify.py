@@ -22,7 +22,13 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from .client import YujianClient, YujianError
-from .const import DEFAULT_DURATION, DISPLAY_NAME, DOMAIN, LEGACY_NAMES
+from .const import (
+    CONF_TTS_ENTITY,
+    DEFAULT_DURATION,
+    DISPLAY_NAME,
+    DOMAIN,
+    LEGACY_NAMES,
+)
 from .coordinator import YujianCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -87,6 +93,12 @@ class YujianNotifyEntity(CoordinatorEntity[YujianCoordinator], NotifyEntity):
             return int(raw)
         except (TypeError, ValueError):
             return DEFAULT_DURATION
+
+    @property
+    def tts_entity(self) -> str | None:
+        """Return the TTS entity chosen in the options, if any."""
+        entity = self._entry.options.get(CONF_TTS_ENTITY)
+        return entity if isinstance(entity, str) and entity else None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

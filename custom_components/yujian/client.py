@@ -186,13 +186,16 @@ class YujianClient:
         self,
         muted: bool | None = None,
         position: str | None = None,
+        theme: str | None = None,
     ) -> dict[str, Any]:
-        """Change the TV's do-not-disturb switch and/or default banner position."""
+        """Change the TV's do-not-disturb switch, default position and theme."""
         payload: dict[str, Any] = {}
         if muted is not None:
             payload["muted"] = muted
         if position:
             payload["position"] = position
+        if theme:
+            payload["theme"] = theme
         url = f"{self.base_url}{CONFIG_PATH_TEMPLATE.format(token=self._token)}"
         data = await self._async_post(url, payload)
         return data if isinstance(data, dict) else {}

@@ -97,10 +97,16 @@ notify:
               value: bottom-right
     tts:
       name: 语音播报
-      description: 打开则朗读标题与正文；也可以填一段自定义文本，只读这段（正文照常显示）。
+      description: 填一段文本让电视自己朗读（依赖电视端的语音引擎，安卓 6 电视可能没有中文语音）；填 http(s) 音频地址则直接播放这个音频文件。想用 HA 合成音频，请用下面的「集成合成语音」。
       example: 门口有人，请查看
       selector:
         text:
+    speak:
+      name: 集成合成语音
+      description: 勾选后，集成用选项里选定的 TTS 服务把标题与正文合成音频，再交给电视播放。这是安卓 6 电视唯一可靠的播报方式，需要先在集成选项里选好 TTS 服务。
+      default: false
+      selector:
+        boolean:
     queue:
       name: 排队展示
       description: 勾选后，如果当前已有横幅在展示，这条会排在后面依次播放，而不是抢先顶掉它。
@@ -130,7 +136,7 @@ dismiss:
 set_config:
   name: 玉简电视设置
   description: >-
-    调整电视端的「闭关免扰」（静音，不再弹横幅）与默认显示位置。两项都可只改其一，改完立即回读电视真实状态。
+    调整电视端的「闭关免扰」（静音，不再弹横幅）、默认显示位置与界面主题。三项都可只改其一，改完立即回读电视真实状态。
   fields:
     muted:
       name: 闭关免扰
@@ -138,6 +144,17 @@ set_config:
       default: false
       selector:
         boolean:
+    theme:
+      name: 界面主题
+      description: 电视端横幅与界面的视觉风格。
+      example: xiuxian
+      selector:
+        select:
+          options:
+            - label: 修仙玉简（默认）
+              value: xiuxian
+            - label: tvOS 极简
+              value: default
     position:
       name: 默认显示位置
       description: 电视端新横幅的默认方位，影响不指定 position 的推送。

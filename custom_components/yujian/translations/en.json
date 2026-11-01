@@ -7,8 +7,9 @@
       },
       "user": {
         "title": "玉简（手动）",
-        "description": "填写电视上玉简界面显示的地址与 Token。",
+        "description": "最省事的做法：在玉简 App 里点「复制调用地址」，把整条链接粘到第一个框，IP、端口和 Token 会自动拆出来。也可以只填下面几项手工配置。",
         "data": {
+          "link": "调用地址（可选，粘贴后自动解析）",
           "host": "电视 IP 地址",
           "port": "端口",
           "token": "Token",
@@ -17,7 +18,9 @@
       }
     },
     "error": {
-      "cannot_connect": "连接不上电视上的玉简服务，请检查 IP、端口与 Token。"
+      "cannot_connect": "连接不上电视上的玉简服务，请检查 IP、端口与 Token。",
+      "invalid_link": "这条链接里没解析出地址或 Token，请检查是否复制完整（形如 http://192.168.1.5:8791/abc123/notify）。",
+      "missing_fields": "请粘贴调用地址，或者把 IP 地址和 Token 都填上。"
     },
     "abort": {
       "already_configured": "这台电视已经配置过了。",
@@ -36,8 +39,10 @@
           "host": "电视 IP 地址",
           "port": "端口",
           "token": "Token",
-          "duration": "默认横幅秒数"
-        }
+          "duration": "默认横幅秒数",
+          "tts_entity": "语音合成服务（TTS）"
+        },
+        "description": "可选：选一个 TTS 服务，之后推送时勾选「语音播报」，集成会自己合成音频再让电视播放。"
       }
     }
   }

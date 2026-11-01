@@ -25,8 +25,9 @@ from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 
 from .client import YujianClient, YujianError
-from .const import BANNER_POSITIONS, DISPLAY_NAME, DOMAIN, LEGACY_NAMES
+from .const import BANNER_POSITIONS, DISPLAY_NAME, DOMAIN, LEGACY_NAMES, THEMES
 from .coordinator import YujianCoordinator
+from .tts_audio import YujianTtsError, async_speech_text_url, speech_text_for
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,18 +53,35 @@ SERVICE_SCHEMA = vol.Schema(
         vol.Optional("tts"): vol.Any(cv.boolean, cv.string),
         vol.Optional("image_interval"): vol.All(vol.Coerce(int), vol.Range(min=1, max=10)),
         vol.Optional("queue"): cv.boolean,
+        vol.Optional("speak"): cv.boolean,
     }
 )
 
 SERVICE_DISMISS = "dismiss"
 
-# Push the TV's own do-not-disturb switch and default banner position.
+# First app version that downloads and plays an audio URL passed in ``tts``
+# instead of handing the string to the local TTS engine.
+AUDIO_MIN_VERSION = (1, 3, 2)
+
+
+def _version_tuple(version: str) -> tuple[int, ...]:
+    """Turn "1.3.2" into (1, 3, 2); ignore any suffix and unparsable parts."""
+    parts: list[int] = []
+    for chunk in version.split("."):
+        digits = "".join(ch for ch in chunk if ch.isdigit())
+        if not digits:
+            break
+        parts.append(int(digits))
+    return tuple(parts) or (0,)
+
+# Push the TV's own do-not-disturb switch, default banner position and theme.
 SERVICE_SET_CONFIG = "set_config"
 
 SET_CONFIG_SCHEMA = vol.Schema(
     {
         vol.Optional("muted"): cv.boolean,
         vol.Optional("position"): vol.In(BANNER_POSITIONS),
+        vol.Optional("theme"): vol.In(THEMES),
     }
 )
 
@@ -161,6 +179,33 @@ def _async_register_service(hass: HomeAssistant) -> None:
                 "image_interval": call.data.get("image_interval"),
                 "queue": call.data.get("queue"),
             }
+
+            # speak: true -> synthesize the banner text with the chosen TTS
+            # entity and hand the app an audio URL, which it plays directly.
+            # This is the only voice path that works on Android 6 TVs, whose
+            # built-in TTS engine has no Chinese voice.
+            if call.data.get("speak") and not extras["tts"]:
+                tts_entity = entity.tts_entity
+                try:
+                    extras["tts"] = await async_speech_text_url(
+                        hass,
+                        tts_entity or "",
+                        speech_text_for(title, message),
+                    )
+                except YujianTtsError as err:
+                    _LOGGER.warning("为 %s 合成语音失败: %s", entity.entity_id, err)
+                    extras["tts"] = None
+                else:
+                    version = str((entity.coordinator.data or {}).get("version") or "")
+                    if version and _version_tuple(version) < AUDIO_MIN_VERSION:
+                        _LOGGER.warning(
+                            "电视上的玉简 App 是 %s，播放音频需要 %s 以上；"
+                            "这条会退化成让电视自己朗读（可能没有声音），"
+                            "请把 App 升级到 %s",
+                            version,
+                            ".".join(map(str, AUDIO_MIN_VERSION)),
+                            ".".join(map(str, AUDIO_MIN_VERSION)),
+                        )
             # Push through the notify platform's own entry point so it records
             # the "last notified" timestamp -- that timestamp *is* the entity
             # state. Calling async_push() directly would send the banner but
@@ -197,6 +242,7 @@ def _async_register_service(hass: HomeAssistant) -> None:
                 result = await client.async_set_config(
                     muted=call.data.get("muted"),
                     position=call.data.get("position"),
+                    theme=call.data.get("theme"),
                 )
             except YujianError as err:
                 _LOGGER.warning("设置 %s 的电视配置失败: %s", client.host, err)

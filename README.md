@@ -45,11 +45,17 @@ HACS → 左侧「集成」→ 右上角「自定义存储库」→ 添加 `http
 
 - 点上面第二个徽章 **「打开 Home Assistant 添加集成」** 可直接跳到配置页
 - **设置 → 集成与设置 → 搜索「玉简」**，如果电视在线会直接出现在「发现」里，点一下即可
-- 也可以点「添加集成」手动填写电视 IP、端口（默认 `8791`）与 token（App 界面上的「Token」）
+- 也可以点「添加集成」手动配置：**在 App 里点「复制调用地址」，把整条链接粘进第一个框**，IP、端口、Token 会自动拆出来（支持 `http://ip:8791/token/notify`、`…/token`、带尖括号或多余空格的粘贴）；也可以只填 IP 与 Token
 
 配置完成后会得到一个通知实体，名字形如 `notify.yu_jian`。
 
 > token 在电视上「重置 Token」后会变。电视重新广播时，集成会自动更新配置项里的 token，一般不需要手工干预。
+
+### 选项：选一个 TTS 服务（想用语音播报才需要）
+
+设置 → 设备与服务 → **玉简** → **配置**，在选项里选一个 `tts.*` 实体。选好之后，推送时勾选 `speak` 就会由 Home Assistant 合成语音，再把音频地址交给电视播放 —— 这条路径不依赖电视自己的语音引擎，安卓 6 电视也能出声。
+
+**注意**：播放音频文件需要 App **v1.3.2 及以上**。旧版 App 会把音频地址当文本朗读（等于没声音），集成检测到版本过低会在日志里明确提示。
 
 ### 关于「自动发现」
 
@@ -111,7 +117,8 @@ data:
 | `image` | URL 或 base64 | 横幅上显示的图片；http(s) 地址按 URL 处理，其余按 base64 内联处理 |
 | `video` | MJPEG 流 URL | 横幅上播放 MJPEG 流（multipart/x-mixed-replace）；不支持 mp4 等视频文件 |
 | `position` | 六个方位 | `top` / `bottom` / `top-left` / `top-right` / `bottom-left` / `bottom-right`；留空沿用电视默认。四角是画中画小窗样式 |
-| `tts` | 布尔或文本 | 打开（`true`）朗读标题与正文；填文本则只读这段，正文照常显示 |
+| `speak` | 布尔 | 由集成用选项里选定的 TTS 服务合成音频再交给电视播放（需 App ≥ 1.3.2） |
+| `tts` | 文本或音频地址 | 填文本让电视自己朗读（安卓 6 可能没中文语音）；填 http(s) 音频地址则直接播放该音频文件 |
 | `queue` | 布尔 | 已有横幅在显示时，这条排队顺延播放，不抢占顶替 |
 | `notify_id` | 字符串 | 同一标识再次推送时在原横幅上平滑更新文案与倒计时，不重新入场闪烁 |
 | `image_interval` | 1–10 秒 | 仅对图片生效，按该间隔重新拉取图片地址，把静态快照变成准视频流 |
@@ -119,7 +126,7 @@ data:
 另有三个配套服务：
 
 - `yujian.dismiss`（无参数）：立即关闭当前横幅，幂等。
-- `yujian.set_config`：`muted`（闭关免扰，不弹横幅）/ `position`（电视端默认方位），两项可只改其一，改完立即回读电视真实状态。
+- `yujian.set_config`：`muted`（闭关免扰，不弹横幅）/ `position`（电视端默认方位）/ `theme`（`xiuxian` 修仙玉简 / `default` tvOS 极简），三项可只改其一，改完立即回读电视真实状态。
 - 实体属性会实时反映电视状态：`version`、`muted`、`position`、`banner`、`history_count`，以及上一条通知的 `last_title` / `last_text` / `last_level` / `last_has_media` / `last_notified_at`（来自 App 的「传音简录」）。
 
 常用组合：
@@ -150,10 +157,19 @@ data:
   message: 快递已放前台
   queue: true
 
-# 睡前打开闭关免扰
+# 语音播报：由 HA 合成，电视只负责播放（安卓 6 也能出声）
+action: yujian.notify
+data:
+  title: 门口有人
+  message: 前门检测到移动，请查看
+  speak: true
+  position: bottom-right
+
+# 睡前打开闭关免扰并切回 tvOS 主题
 action: yujian.set_config
 data:
   muted: true
+  theme: default
 ```
 
 这些参数在 Home Assistant 的自动化编辑器里就是下拉框、数字滑块和开关，可以直接点选，不用手写 YAML。
