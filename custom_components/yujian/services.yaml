@@ -2,6 +2,10 @@ notify:
   name: 玉简横幅通知
   description: >-
     在电视顶部推送一条横幅通知，可附一张图片或一路 MJPEG 视频流。电视端服务被系统杀掉时，会自动通过 ADB 拉起后重试。
+  target:
+    entity:
+      domain: notify
+      integration: yujian
   fields:
     message:
       name: 正文
@@ -95,15 +99,9 @@ notify:
               value: bottom-left
             - label: 右下角小窗
               value: bottom-right
-    tts:
-      name: 语音播报
-      description: 填一段文本让电视自己朗读（依赖电视端的语音引擎，安卓 6 电视可能没有中文语音）；填 http(s) 音频地址则直接播放这个音频文件。想用 HA 合成音频，请用下面的「集成合成语音」。
-      example: 门口有人，请查看
-      selector:
-        text:
     speak:
-      name: 集成合成语音
-      description: 勾选后，集成用选项里选定的 TTS 服务把标题与正文合成音频，再交给电视播放。这是安卓 6 电视唯一可靠的播报方式，需要先在集成选项里选好 TTS 服务。
+      name: 语音播报
+      description: 勾选后，集成用选项里选定的 TTS 服务把标题和正文合成语音，再交给电视播放。需要在集成选项里先选好 TTS 服务，且电视上的 App 为 1.3.2 以上。
       default: false
       selector:
         boolean:
@@ -133,10 +131,18 @@ dismiss:
   name: 玉简关闭横幅
   description: >-
     立即关闭当前显示的横幅。接口是幂等的：没有横幅在显示时调用也返回成功。
+  target:
+    entity:
+      domain: notify
+      integration: yujian
 set_config:
   name: 玉简电视设置
   description: >-
     调整电视端的「闭关免扰」（静音，不再弹横幅）、默认显示位置与界面主题。三项都可只改其一，改完立即回读电视真实状态。
+  target:
+    entity:
+      domain: notify
+      integration: yujian
   fields:
     muted:
       name: 闭关免扰

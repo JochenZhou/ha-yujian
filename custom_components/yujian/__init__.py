@@ -23,6 +23,7 @@ from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_TOKEN, Pla
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.service import async_extract_entity_ids
 
 from .client import YujianClient, YujianError
 from .const import BANNER_POSITIONS, DISPLAY_NAME, DOMAIN, LEGACY_NAMES, THEMES
@@ -50,10 +51,14 @@ SERVICE_SCHEMA = vol.Schema(
         vol.Optional("video"): cv.string,
         vol.Optional("notify_id"): cv.string,
         vol.Optional("position"): vol.In(BANNER_POSITIONS),
-        vol.Optional("tts"): vol.Any(cv.boolean, cv.string),
         vol.Optional("image_interval"): vol.All(vol.Coerce(int), vol.Range(min=1, max=10)),
         vol.Optional("queue"): cv.boolean,
         vol.Optional("speak"): cv.boolean,
+        # HomeAssistant merges the call's `target` into the service data before
+        # validating it, so these three keys must be part of the schema or a
+        # targeted call fails with 400. They stay optional: a call without a
+        # target still fans out to every TV.
+        **cv.ENTITY_SERVICE_FIELDS,
     }
 )
 
@@ -82,6 +87,7 @@ SET_CONFIG_SCHEMA = vol.Schema(
         vol.Optional("muted"): cv.boolean,
         vol.Optional("position"): vol.In(BANNER_POSITIONS),
         vol.Optional("theme"): vol.In(THEMES),
+        **cv.ENTITY_SERVICE_FIELDS,
     }
 )
 
@@ -157,13 +163,19 @@ def _async_register_service(hass: HomeAssistant) -> None:
         return
 
     async def _async_handle_notify(call: ServiceCall) -> None:
-        """Push a banner to every configured TV."""
+        """Push a banner to the targeted TVs (all of them when none is given)."""
         title = call.data.get("title") or ""
         message = call.data["message"]
+
+        targets = await async_extract_entity_ids(call)
 
         for entry_data in hass.data.get(DOMAIN, {}).values():
             entity = entry_data.get("entity")
             if entity is None:
+                continue
+            # `target` in the service call narrows the push to the picked
+            # notify entities; without it the call fans out to every TV.
+            if targets and entity.entity_id not in targets:
                 continue
             extras = {
                 "duration": call.data.get("duration", entity.default_duration),
@@ -175,16 +187,16 @@ def _async_register_service(hass: HomeAssistant) -> None:
                 "video": call.data.get("video"),
                 "notify_id": call.data.get("notify_id"),
                 "position": call.data.get("position"),
-                "tts": call.data.get("tts"),
+                "tts": None,
                 "image_interval": call.data.get("image_interval"),
                 "queue": call.data.get("queue"),
             }
 
-            # speak: true -> synthesize the banner text with the chosen TTS
-            # entity and hand the app an audio URL, which it plays directly.
-            # This is the only voice path that works on Android 6 TVs, whose
-            # built-in TTS engine has no Chinese voice.
-            if call.data.get("speak") and not extras["tts"]:
+            # speak: true -> synthesize the banner's title + body with the TTS
+            # entity picked in the options and hand the app an audio URL, which
+            # it downloads and plays. This is the only voice path that works on
+            # Android 6 TVs, whose built-in engine has no Chinese voice.
+            if call.data.get("speak"):
                 tts_entity = entity.tts_entity
                 try:
                     extras["tts"] = await async_speech_text_url(
@@ -221,10 +233,13 @@ def _async_register_service(hass: HomeAssistant) -> None:
                 _LOGGER.warning("推送到 %s 失败: %s", entity.entity_id, err)
 
     async def _async_handle_dismiss(call: ServiceCall) -> None:
-        """Close the banner currently shown on every configured TV."""
+        """Close the banner on the targeted TVs (all of them by default)."""
+        targets = await async_extract_entity_ids(call)
         for entry_data in hass.data.get(DOMAIN, {}).values():
             entity = entry_data.get("entity")
             if entity is None:
+                continue
+            if targets and entity.entity_id not in targets:
                 continue
             try:
                 await entity.async_dismiss()
@@ -232,11 +247,15 @@ def _async_register_service(hass: HomeAssistant) -> None:
                 _LOGGER.warning("关闭 %s 的横幅失败: %s", entity.entity_id, err)
 
     async def _async_handle_set_config(call: ServiceCall) -> None:
-        """Push mute / default-position changes to every configured TV."""
+        """Push mute / position / theme to the targeted TVs (all by default)."""
+        targets = await async_extract_entity_ids(call)
         for entry_data in hass.data.get(DOMAIN, {}).values():
             client = entry_data.get("client")
             coordinator = entry_data.get("coordinator")
             if client is None:
+                continue
+            entity = entry_data.get("entity")
+            if targets and (entity is None or entity.entity_id not in targets):
                 continue
             try:
                 result = await client.async_set_config(

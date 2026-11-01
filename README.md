@@ -117,8 +117,7 @@ data:
 | `image` | URL 或 base64 | 横幅上显示的图片；http(s) 地址按 URL 处理，其余按 base64 内联处理 |
 | `video` | MJPEG 流 URL | 横幅上播放 MJPEG 流（multipart/x-mixed-replace）；不支持 mp4 等视频文件 |
 | `position` | 六个方位 | `top` / `bottom` / `top-left` / `top-right` / `bottom-left` / `bottom-right`；留空沿用电视默认。四角是画中画小窗样式 |
-| `speak` | 布尔 | 由集成用选项里选定的 TTS 服务合成音频再交给电视播放（需 App ≥ 1.3.2） |
-| `tts` | 文本或音频地址 | 填文本让电视自己朗读（安卓 6 可能没中文语音）；填 http(s) 音频地址则直接播放该音频文件 |
+| `speak` | 布尔 | 用选项里选定的 TTS 服务朗读标题和正文（需先在集成选项里选好 TTS，且 App ≥ 1.3.2） |
 | `queue` | 布尔 | 已有横幅在显示时，这条排队顺延播放，不抢占顶替 |
 | `notify_id` | 字符串 | 同一标识再次推送时在原横幅上平滑更新文案与倒计时，不重新入场闪烁 |
 | `image_interval` | 1–10 秒 | 仅对图片生效，按该间隔重新拉取图片地址，把静态快照变成准视频流 |
@@ -129,6 +128,20 @@ data:
 - `yujian.set_config`：`muted`（闭关免扰，不弹横幅）/ `position`（电视端默认方位）/ `theme`（`xiuxian` 修仙玉简 / `default` tvOS 极简），三项可只改其一，改完立即回读电视真实状态。
 - 实体属性会实时反映电视状态：`version`、`muted`、`position`、`banner`、`history_count`，以及上一条通知的 `last_title` / `last_text` / `last_level` / `last_has_media` / `last_notified_at`（来自 App 的「传音简录」）。
 
+### 只发给某一台
+
+三个服务都支持 HA 标准的目标选择：在自动化编辑器里点「选择实体」，或在 YAML 里写 `target`。不指定就发给所有已配置的玉简设备。
+
+```yaml
+action: yujian.notify
+target:
+  entity_id: notify.yu_jian      # 只发电视，不发给手机上的玉简
+data:
+  message: 电视专属提醒
+```
+
+多个目标写成列表即可：`entity_id: [notify.yu_jian, notify.yu_jian_2]`。
+
 常用组合：
 
 ```yaml
@@ -138,7 +151,7 @@ data:
   title: 门口有人
   message: 前门检测到移动
   position: bottom-right
-  tts: true
+  speak: true
   image: http://192.168.101.20:8080/snapshot.jpg
   image_interval: 2
   duration: 20
