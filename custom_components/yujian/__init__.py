@@ -15,6 +15,7 @@ integration, which is already configured for this TV).
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import voluptuous as vol
 
@@ -38,6 +39,26 @@ PLATFORMS: list[Platform] = [Platform.NOTIFY]
 # platforms are: yujian.notify pushes a banner to every configured TV.
 SERVICE_NOTIFY = "notify"
 
+# Which voice you get:
+#   off -> no speech at all
+#   ha  -> Home Assistant renders the audio and the TV just plays the URL
+#          (the only path that works on Android 6 TVs: no Chinese voice there)
+#   tv  -> the TV app reads the title + body with its own TTS engine
+SPEAK_MODES = ("off", "ha", "tv")
+
+# Legacy booleans: true used to mean "HA synthesizes".
+SPEAK_MODE_ALIASES = {True: "ha", False: "off"}
+
+
+def _speak_mode(value: Any) -> str:
+    """Normalise the speak option (bool or mode string) to a mode."""
+    if isinstance(value, bool):
+        return SPEAK_MODE_ALIASES[value]
+    if value in SPEAK_MODES:
+        return str(value)
+    return "off"
+
+
 SERVICE_SCHEMA = vol.Schema(
     {
         vol.Required("message"): cv.string,
@@ -53,7 +74,7 @@ SERVICE_SCHEMA = vol.Schema(
         vol.Optional("position"): vol.In(BANNER_POSITIONS),
         vol.Optional("image_interval"): vol.All(vol.Coerce(int), vol.Range(min=1, max=10)),
         vol.Optional("queue"): cv.boolean,
-        vol.Optional("speak"): cv.boolean,
+        vol.Optional("speak"): vol.Any(cv.boolean, vol.In(SPEAK_MODES)),
         # HomeAssistant merges the call's `target` into the service data before
         # validating it, so these three keys must be part of the schema or a
         # targeted call fails with 400. They stay optional: a call without a
@@ -192,11 +213,16 @@ def _async_register_service(hass: HomeAssistant) -> None:
                 "queue": call.data.get("queue"),
             }
 
-            # speak: true -> synthesize the banner's title + body with the TTS
-            # entity picked in the options and hand the app an audio URL, which
-            # it downloads and plays. This is the only voice path that works on
-            # Android 6 TVs, whose built-in engine has no Chinese voice.
-            if call.data.get("speak"):
+            # speak: off | ha | tv
+            #   ha -> Home Assistant synthesizes title + body with the TTS
+            #         entity from the options and sends the audio URL (the only
+            #         voice path that works on Android 6 TVs).
+            #   tv -> let the TV app read the banner with its own engine; on
+            #         Android 6 that engine usually has no Chinese voice.
+            speak_mode = _speak_mode(call.data.get("speak"))
+            if speak_mode == "tv":
+                extras["tts"] = True
+            elif speak_mode == "ha":
                 tts_entity = entity.tts_entity
                 try:
                     extras["tts"] = await async_speech_text_url(

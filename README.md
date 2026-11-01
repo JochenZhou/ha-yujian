@@ -53,9 +53,35 @@ HACS → 左侧「集成」→ 右上角「自定义存储库」→ 添加 `http
 
 ### 选项：选一个 TTS 服务（想用语音播报才需要）
 
-设置 → 设备与服务 → **玉简** → **配置**，在选项里选一个 `tts.*` 实体。选好之后，推送时勾选 `speak` 就会由 Home Assistant 合成语音，再把音频地址交给电视播放 —— 这条路径不依赖电视自己的语音引擎，安卓 6 电视也能出声。
+设置 → 设备与服务 → **玉简** → **配置**，在选项里选一个 `tts.*` 实体。只在 `speak: ha`（让 HA 念）时用到它；选 `tv` 则完全不用管这一项。
 
 **注意**：播放音频文件需要 App **v1.3.2 及以上**。旧版 App 会把音频地址当文本朗读（等于没声音），集成检测到版本过低会在日志里明确提示。
+
+### 语音播报：谁来念？
+
+`speak` 是三选一，不是开关：
+
+| 取值 | 谁合成 | 适用场景 |
+| --- | --- | --- |
+| `off`（默认） | — | 只要横幅，不出声 |
+| `ha` | Home Assistant（用集成选项里选定的 TTS 服务） | **推荐**。电视只负责下载并播放 `http://<HA>/api/tts_proxy/xxx.mp3`，这个地址不需要 token，安卓 6 电视也能出声 |
+| `tv` | 电视上的玉简 App（系统语音引擎） | 电视装了中文语音时可用；安卓 6 小米电视通常没有，会没声音 |
+
+```yaml
+# 让 HA 念
+action: yujian.notify
+data:
+  message: 门口有人
+  speak: ha
+
+# 让电视自己念
+action: yujian.notify
+data:
+  message: 门口有人
+  speak: tv
+```
+
+选 `ha` 的前提：**设置 → 设备与服务 → 玉简 → 配置** 里选好一个 TTS 服务，且 App 版本 ≥ 1.3.2（低于这个版本会把音频地址当文本朗读，日志会提示）。
 
 ### 关于「自动发现」
 
@@ -117,7 +143,7 @@ data:
 | `image` | URL 或 base64 | 横幅上显示的图片；http(s) 地址按 URL 处理，其余按 base64 内联处理 |
 | `video` | MJPEG 流 URL | 横幅上播放 MJPEG 流（multipart/x-mixed-replace）；不支持 mp4 等视频文件 |
 | `position` | 六个方位 | `top` / `bottom` / `top-left` / `top-right` / `bottom-left` / `bottom-right`；留空沿用电视默认。四角是画中画小窗样式 |
-| `speak` | 布尔 | 用选项里选定的 TTS 服务朗读标题和正文（需先在集成选项里选好 TTS，且 App ≥ 1.3.2） |
+| `speak` | `off` / `ha` / `tv` | 谁来说话：`off` 不播报；`ha` 由 Home Assistant 合成音频交给电视播放；`tv` 让电视 App 用自己的引擎朗读。旧写法 `speak: true` 等同 `ha` |
 | `queue` | 布尔 | 已有横幅在显示时，这条排队顺延播放，不抢占顶替 |
 | `notify_id` | 字符串 | 同一标识再次推送时在原横幅上平滑更新文案与倒计时，不重新入场闪烁 |
 | `image_interval` | 1–10 秒 | 仅对图片生效，按该间隔重新拉取图片地址，把静态快照变成准视频流 |
@@ -151,7 +177,7 @@ data:
   title: 门口有人
   message: 前门检测到移动
   position: bottom-right
-  speak: true
+  speak: ha
   image: http://192.168.101.20:8080/snapshot.jpg
   image_interval: 2
   duration: 20
@@ -175,7 +201,7 @@ action: yujian.notify
 data:
   title: 门口有人
   message: 前门检测到移动，请查看
-  speak: true
+  speak: ha
   position: bottom-right
 
 # 睡前打开闭关免扰并切回 tvOS 主题
