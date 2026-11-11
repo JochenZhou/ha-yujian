@@ -2,47 +2,249 @@
   "config": {
     "step": {
       "confirm": {
-        "title": "玉简（自动发现）",
-        "description": "在网络上发现了电视 {name}，要把它接入 Home Assistant 吗？"
+        "title": "Yujian (discovered)",
+        "description": "Discovered {name} on your network. Add this device to Home Assistant?"
       },
       "user": {
-        "title": "玉简（手动）",
-        "description": "最省事的做法：在玉简 App 里点「复制调用地址」，把整条链接粘到第一个框，IP、端口和 Token 会自动拆出来。也可以只填下面几项手工配置。",
+        "title": "Yujian (manual)",
+        "description": "Paste the call URL copied from the Yujian app to extract connection details, or enter them manually.",
         "data": {
-          "link": "调用地址（可选，粘贴后自动解析）",
-          "host": "电视 IP 地址",
-          "port": "端口",
+          "link": "Call URL (optional)",
+          "host": "TV IP address",
+          "port": "Port",
           "token": "Token",
-          "name": "名称"
+          "name": "Name"
+        },
+        "data_description": {
+          "name": "Device name shown in Home Assistant.",
+          "host": "The TV’s local IPv4 address; extracted automatically from a call URL.",
+          "port": "Yujian HTTP service port; defaults to 8791.",
+          "token": "Current access token from the TV app; extracted automatically from a call URL.",
+          "link": "Paste the call URL copied from the app to extract the address, port, and token automatically."
         }
       }
     },
     "error": {
-      "cannot_connect": "连接不上电视上的玉简服务，请检查 IP、端口与 Token。",
-      "invalid_link": "这条链接里没解析出地址或 Token，请检查是否复制完整（形如 http://192.168.1.5:8791/abc123/notify）。",
-      "missing_fields": "请粘贴调用地址，或者把 IP 地址和 Token 都填上。"
+      "cannot_connect": "Cannot connect to Yujian. Check the IP address, port, and token.",
+      "invalid_link": "The URL does not contain an address or token. Copy the complete URL, such as http://192.168.1.5:8791/abc123/notify.",
+      "missing_fields": "Paste a call URL, or enter both the IP address and token."
     },
     "abort": {
-      "already_configured": "这台电视已经配置过了。",
-      "already_in_progress": "这台电视已经在配置流程里了，去「已发现」里继续即可。",
-      "not_ipv4_address": "只支持 IPv4 地址的电视。",
-      "no_token": "mDNS 广播里没有 Token，无法自动配置。",
-      "not_supported_type": "这不是玉简的 mDNS 广播，已忽略。"
+      "already_configured": "This device is already configured.",
+      "already_in_progress": "Configuration is already in progress. Continue from discovered devices.",
+      "not_ipv4_address": "Only IPv4 addresses are supported.",
+      "no_token": "The mDNS announcement does not include a token.",
+      "not_supported_type": "This is not a supported Yujian mDNS announcement."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "玉简 设置",
+        "title": "Yujian settings",
+        "description": "Adjust connection details and default duration. Optional HA TTS is used by speak: ha; speak: tv uses the TV speech engine.",
         "data": {
-          "name": "名称",
-          "host": "电视 IP 地址",
-          "port": "端口",
+          "name": "Name",
+          "host": "TV IP address",
+          "port": "Port",
           "token": "Token",
-          "duration": "默认横幅秒数",
-          "tts_entity": "语音合成服务（TTS）"
+          "duration": "Default banner duration",
+          "tts_entity": "Text-to-speech service (TTS)"
         },
-        "description": "可选：选一个 TTS 服务，之后推送时勾选「语音播报」，集成会自己合成音频再让电视播放。"
+        "data_description": {
+          "name": "Device name shown in Home Assistant.",
+          "host": "The TV’s current local IPv4 address.",
+          "port": "Yujian HTTP service port; defaults to 8791.",
+          "token": "Current access token from the TV app; update it if the token has been reset.",
+          "duration": "Banner duration used when duration is omitted, from 1 to 30 seconds.",
+          "tts_entity": "Used only by speak: ha. The TV must be able to fetch audio from Home Assistant."
+        }
+      }
+    }
+  },
+  "entity": {
+    "switch": {
+      "muted": {
+        "name": "Notification mute"
+      }
+    },
+    "select": {
+      "theme": {
+        "name": "Theme",
+        "state": {
+          "xiuxian": "Immortal jade",
+          "default": "tvOS minimal",
+          "palace": "Palace",
+          "cyberpunk": "Cyberpunk",
+          "wukong": "Wukong",
+          "matrix": "Matrix",
+          "ink_light": "Light ink",
+          "gamer": "Gamer",
+          "minecraft": "Minecraft"
+        }
+      },
+      "position": {
+        "name": "Default position",
+        "state": {
+          "top": "Top banner",
+          "bottom": "Bottom banner",
+          "top-left": "Top left window",
+          "top-right": "Top right window",
+          "bottom-left": "Bottom left window",
+          "bottom-right": "Bottom right window"
+        }
+      }
+    },
+    "button": {
+      "dismiss": {
+        "name": "Dismiss banner"
+      },
+      "refresh": {
+        "name": "Refresh status"
+      }
+    },
+    "binary_sensor": {
+      "banner": {
+        "name": "Banner showing"
+      }
+    },
+    "sensor": {
+      "last_notification": {
+        "name": "Last notification"
+      },
+      "history_count": {
+        "name": "History count"
+      },
+      "uptime": {
+        "name": "Service uptime"
+      }
+    }
+  },
+  "services": {
+    "notify": {
+      "name": "Send Yujian banner",
+      "description": "Send a banner with optional media. Without a target, sends to all configured Yujian devices.",
+      "fields": {
+        "message": {
+          "name": "Message",
+          "description": "Optional body, up to four lines. Provide at least one of title, message, image, or video."
+        },
+        "title": {
+          "name": "Title",
+          "description": "Optional banner title."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "Duration from 1 to 30 seconds. Omit to use integration options."
+        },
+        "level": {
+          "name": "Level",
+          "description": "Notification severity: info, warn, or error."
+        },
+        "sticky": {
+          "name": "Sticky",
+          "description": "Keep visible until replaced, dismissed, or max_duration is reached."
+        },
+        "max_duration": {
+          "name": "Maximum sticky duration",
+          "description": "Safety timeout from 30 to 3600 seconds; defaults to 300."
+        },
+        "sound": {
+          "name": "Notification sound",
+          "description": "Play an entry sound. Device mute suppresses sound while keeping the banner visible."
+        },
+        "image": {
+          "name": "Image",
+          "description": "HTTP(S) image URL or inline base64 image. The TV must be able to fetch the URL."
+        },
+        "video": {
+          "name": "MJPEG stream",
+          "description": "MJPEG stream URL (multipart/x-mixed-replace). MP4 and other video files are not supported."
+        },
+        "position": {
+          "name": "Position",
+          "description": "Override this notification’s position. Omit to use the device default; corners use a small window."
+        },
+        "speak": {
+          "name": "Speech",
+          "description": "off disables speech; ha uses configured HA TTS; tv uses TV speech. Legacy true means ha and false means off. Device mute suppresses speech."
+        },
+        "queue": {
+          "name": "Queue",
+          "description": "Queue after the current banner instead of replacing it."
+        },
+        "notify_id": {
+          "name": "Notification ID",
+          "description": "Reuse an ID to update the current banner and countdown without an entry animation."
+        },
+        "image_interval": {
+          "name": "Image refresh interval",
+          "description": "Fetch the image URL again every 1 to 10 seconds. Applies only to images."
+        },
+        "theme": {
+          "name": "Notification theme",
+          "description": "Override this notification’s theme. Omit to use the device default without changing global settings."
+        }
+      }
+    },
+    "dismiss": {
+      "name": "Dismiss Yujian banner",
+      "description": "Close the current banner. Calling this when no banner is showing is also safe."
+    },
+    "set_config": {
+      "name": "Configure Yujian device",
+      "description": "Change mute, default position, or theme. Omitted settings are preserved. Mute suppresses sound and speech while keeping banners visible.",
+      "fields": {
+        "muted": {
+          "name": "Notification mute",
+          "description": "Suppress sounds and speech while keeping banners visible."
+        },
+        "theme": {
+          "name": "Default theme",
+          "description": "Default theme for notifications that omit theme."
+        },
+        "position": {
+          "name": "Default position",
+          "description": "Default position for notifications that omit position."
+        }
+      }
+    }
+  },
+  "selector": {
+    "theme": {
+      "options": {
+        "xiuxian": "Immortal jade",
+        "default": "tvOS minimal",
+        "palace": "Palace",
+        "cyberpunk": "Cyberpunk",
+        "wukong": "Wukong",
+        "matrix": "Matrix",
+        "ink_light": "Light ink",
+        "gamer": "Gamer",
+        "minecraft": "Minecraft"
+      }
+    },
+    "position": {
+      "options": {
+        "top": "Top banner",
+        "bottom": "Bottom banner",
+        "top-left": "Top left window",
+        "top-right": "Top right window",
+        "bottom-left": "Bottom left window",
+        "bottom-right": "Bottom right window"
+      }
+    },
+    "level": {
+      "options": {
+        "info": "Information",
+        "warn": "Warning",
+        "error": "Error"
+      }
+    },
+    "speak": {
+      "options": {
+        "off": "Off",
+        "ha": "Home Assistant TTS",
+        "tv": "TV speech engine"
       }
     }
   }

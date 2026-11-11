@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigFlowResult, OptionsFlow
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_TOKEN
 from homeassistant.helpers import selector
@@ -21,7 +20,22 @@ class YujianOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         """Manage the 玉简 options."""
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            connection = {
+                key: value
+                for key, value in user_input.items()
+                if key in (CONF_HOST, CONF_PORT, CONF_TOKEN, CONF_NAME)
+            }
+            self.hass.config_entries.async_update_entry(
+                self.config_entry, data={**self.config_entry.data, **connection}
+            )
+            return self.async_create_entry(
+                title="",
+                data={
+                    key: value
+                    for key, value in user_input.items()
+                    if key not in connection
+                },
+            )
 
         current = self.config_entry.data
         options = self.config_entry.options
@@ -40,9 +54,8 @@ class YujianOptionsFlow(OptionsFlow):
             # the audio URL to the app. This is the only voice path that works
             # on Android 6 TVs, which ship no Chinese TTS voice.
             vol.Optional(
-                CONF_TTS_ENTITY, default=options.get(CONF_TTS_ENTITY, "")
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="tts")
-            ),
+                CONF_TTS_ENTITY,
+                description={"suggested_value": options.get(CONF_TTS_ENTITY)},
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="tts")),
         }
         return self.async_show_form(step_id="init", data_schema=vol.Schema(schema))

@@ -79,7 +79,17 @@ BANNER_POSITIONS = (
 )
 
 # Visual themes the app can switch between (``theme`` in the config endpoint).
-THEMES = ("default", "xiuxian")
+THEMES = (
+    "xiuxian",
+    "default",
+    "palace",
+    "cyberpunk",
+    "wukong",
+    "matrix",
+    "ink_light",
+    "gamer",
+    "minecraft",
+)
 
 # Option key: which TTS entity the integration uses to synthesize speech.
 CONF_TTS_ENTITY = "tts_entity"

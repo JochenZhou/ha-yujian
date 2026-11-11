@@ -12,7 +12,6 @@ from typing import Any
 from urllib.parse import urlparse
 
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_TOKEN
 from homeassistant.core import callback
@@ -61,7 +60,15 @@ def parse_link(raw: str) -> dict[str, Any] | None:
         segment = segment.strip()
         if not segment:
             continue
-        if segment in ("notify", "dismiss", "history", "config", "ui", "stream", "health"):
+        if segment in (
+            "notify",
+            "dismiss",
+            "history",
+            "config",
+            "ui",
+            "stream",
+            "health",
+        ):
             continue
         token = segment
         break
@@ -145,7 +152,7 @@ class YujianConfigFlow(ConfigFlow, domain=DOMAIN):
         # One entry per TV. The token changes when the user resets it on the
         # TV, so the host is the stable identity here.
         await self.async_set_unique_id(host)
-        self._abort_if_unique_id_configured(updates=data)
+        self._abort_if_unique_id_configured(updates=data, reload_on_update=False)
 
         self._discovered = data
         self.context["title_placeholders"] = {"name": host}
@@ -169,7 +176,9 @@ class YujianConfigFlow(ConfigFlow, domain=DOMAIN):
 
         # The entry may have been created manually while this confirmation
         # was waiting, so check again before creating a second one.
-        self._abort_if_unique_id_configured(updates=self._discovered)
+        self._abort_if_unique_id_configured(
+            updates=self._discovered, reload_on_update=False
+        )
 
         return self.async_create_entry(
             title=self._discovered[CONF_NAME], data=self._discovered
@@ -196,9 +205,17 @@ class YujianConfigFlow(ConfigFlow, domain=DOMAIN):
             elif (user_input.get("link") or "").strip():
                 errors["link"] = "invalid_link"
 
-            host = (user_input.get(CONF_HOST) or "").strip() or (parsed or {}).get(CONF_HOST, "")
-            token = (user_input.get(CONF_TOKEN) or "").strip() or (parsed or {}).get(CONF_TOKEN, "")
-            port = user_input.get(CONF_PORT) or (parsed or {}).get(CONF_PORT) or DEFAULT_PORT
+            host = (user_input.get(CONF_HOST) or "").strip() or (parsed or {}).get(
+                CONF_HOST, ""
+            )
+            token = (user_input.get(CONF_TOKEN) or "").strip() or (parsed or {}).get(
+                CONF_TOKEN, ""
+            )
+            port = (
+                user_input.get(CONF_PORT)
+                or (parsed or {}).get(CONF_PORT)
+                or DEFAULT_PORT
+            )
             name = (user_input.get(CONF_NAME) or "").strip() or DISPLAY_NAME
 
             if "link" not in errors and (not host or not token):
@@ -214,7 +231,8 @@ class YujianConfigFlow(ConfigFlow, domain=DOMAIN):
                         CONF_HOST: host,
                         CONF_PORT: port,
                         CONF_TOKEN: token,
-                    }
+                    },
+                    reload_on_update=False,
                 )
 
                 from .client import YujianClient, YujianError

@@ -14,6 +14,13 @@
           "port": "端口",
           "token": "Token",
           "name": "名称"
+        },
+        "data_description": {
+          "name": "此设备在 Home Assistant 中显示的名称。",
+          "host": "电视的局域网 IPv4 地址；使用调用地址时自动解析。",
+          "port": "玉简 HTTP 服务端口，默认 8791。",
+          "token": "电视端当前的访问 Token；使用调用地址时自动解析。",
+          "link": "粘贴 App 中复制的调用地址，自动解析 IP、端口和 Token；也可手动填写下方参数。"
         }
       }
     },
@@ -42,7 +49,202 @@
           "duration": "默认横幅秒数",
           "tts_entity": "语音合成服务（TTS）"
         },
-        "description": "可选：选一个 TTS 服务，之后推送时勾选「语音播报」，集成会自己合成音频再让电视播放。"
+        "description": "调整连接参数和默认时长。可选 TTS 服务仅用于 speak: ha；speak: tv 使用电视自身的语音引擎。",
+        "data_description": {
+          "name": "此设备在 Home Assistant 中显示的名称。",
+          "host": "电视当前的局域网 IPv4 地址。",
+          "port": "玉简 HTTP 服务端口，默认 8791。",
+          "token": "电视端当前的访问 Token；重置后需保持一致。",
+          "duration": "未指定 duration 时使用的横幅停留时间，1–30 秒。",
+          "tts_entity": "仅 speak: ha 使用；电视需能访问 HA 生成的音频地址。"
+        }
+      }
+    }
+  },
+  "entity": {
+    "switch": {
+      "muted": {
+        "name": "通知静音"
+      }
+    },
+    "select": {
+      "theme": {
+        "name": "主题",
+        "state": {
+          "xiuxian": "修仙玉简",
+          "default": "tvOS 极简",
+          "palace": "大唐鎏金",
+          "cyberpunk": "赛博霓虹",
+          "wukong": "黑神话·暗金",
+          "matrix": "极客终端",
+          "ink_light": "江南宣纸",
+          "gamer": "主机奖杯",
+          "minecraft": "方块世界"
+        }
+      },
+      "position": {
+        "name": "默认显示位置",
+        "state": {
+          "top": "顶边通栏",
+          "bottom": "底边通栏",
+          "top-left": "左上角小窗",
+          "top-right": "右上角小窗",
+          "bottom-left": "左下角小窗",
+          "bottom-right": "右下角小窗"
+        }
+      }
+    },
+    "button": {
+      "dismiss": {
+        "name": "关闭横幅"
+      },
+      "refresh": {
+        "name": "刷新状态"
+      }
+    },
+    "binary_sensor": {
+      "banner": {
+        "name": "横幅显示中"
+      }
+    },
+    "sensor": {
+      "last_notification": {
+        "name": "最近通知"
+      },
+      "history_count": {
+        "name": "通知历史条数"
+      },
+      "uptime": {
+        "name": "服务运行时间"
+      }
+    }
+  },
+  "services": {
+    "notify": {
+      "name": "玉简横幅通知",
+      "description": "向选定设备发送横幅通知，可附图片或 MJPEG 流；未选目标时发送到所有已配置的玉简设备。",
+      "fields": {
+        "message": {
+          "name": "正文",
+          "description": "可选正文，最多四行；标题、正文、图片或视频至少填写一项。"
+        },
+        "title": {
+          "name": "标题",
+          "description": "横幅标题，可留空。"
+        },
+        "duration": {
+          "name": "停留秒数",
+          "description": "横幅停留时间，1–30 秒；留空使用集成选项中的默认时长。"
+        },
+        "level": {
+          "name": "分级",
+          "description": "决定铃铛与描边的颜色。"
+        },
+        "sticky": {
+          "name": "常驻",
+          "description": "勾选后横幅不自动消失，直到被新通知替换、调用 yujian.dismiss 或到 max_duration 上限。"
+        },
+        "max_duration": {
+          "name": "常驻上限秒数",
+          "description": "常驻横幅的兜底消失时间，30–3600 秒，默认 300 秒。防止推送方异常后横幅永久占屏。"
+        },
+        "sound": {
+          "name": "播放提示音",
+          "description": "是否播放入场提示音；设备静音开启时不播放，横幅仍然显示。"
+        },
+        "image": {
+          "name": "图片",
+          "description": "图片的 HTTP(S) 地址或 base64 内容；电视需能直接访问图片地址。"
+        },
+        "video": {
+          "name": "视频（MJPEG 流）",
+          "description": "MJPEG 流地址（multipart/x-mixed-replace），例如摄像头的 MJPEG 子码流；App 以约 15 帧/秒软解显示。不支持 mp4 等普通视频文件。"
+        },
+        "position": {
+          "name": "显示位置",
+          "description": "仅覆盖本次通知的位置；留空沿用设备默认设置，四角使用小窗样式。"
+        },
+        "speak": {
+          "name": "语音播报",
+          "description": "off 不播报；ha 使用集成选项中的 TTS 服务；tv 使用电视语音引擎。兼容 true（ha）和 false（off）。设备静音时不播放语音。"
+        },
+        "queue": {
+          "name": "排队展示",
+          "description": "勾选后，如果当前已有横幅在展示，这条会排在后面依次播放，而不是抢先顶掉它。"
+        },
+        "notify_id": {
+          "name": "通知标识",
+          "description": "同一条标识再次推送时，会在原横幅上平滑更新文案与倒计时（不会重新入场闪烁）。适合倒计时、进度这类高频刷新。"
+        },
+        "image_interval": {
+          "name": "图片刷新秒数",
+          "description": "仅对图片生效。设置后电视会按该间隔重新拉取图片地址，把静态快照变成准视频流（1–10 秒）。"
+        },
+        "theme": {
+          "name": "本次通知主题",
+          "description": "仅覆盖本次通知的主题；留空沿用设备默认主题，不修改全局设置。"
+        }
+      }
+    },
+    "dismiss": {
+      "name": "玉简关闭横幅",
+      "description": "立即关闭当前显示的横幅。接口是幂等的：没有横幅在显示时调用也返回成功。"
+    },
+    "set_config": {
+      "name": "玉简电视设置",
+      "description": "修改通知静音、默认位置或默认主题；只传需要修改的字段。静音关闭提示音和语音，横幅仍然显示。",
+      "fields": {
+        "muted": {
+          "name": "通知静音",
+          "description": "开启后关闭提示音与语音播报，横幅仍然显示。"
+        },
+        "theme": {
+          "name": "界面主题",
+          "description": "设备默认主题，影响未指定 theme 的后续通知。"
+        },
+        "position": {
+          "name": "默认显示位置",
+          "description": "电视端新横幅的默认方位，影响不指定 position 的推送。"
+        }
+      }
+    }
+  },
+  "selector": {
+    "theme": {
+      "options": {
+        "xiuxian": "修仙玉简",
+        "default": "tvOS 极简",
+        "palace": "大唐鎏金",
+        "cyberpunk": "赛博霓虹",
+        "wukong": "黑神话·暗金",
+        "matrix": "极客终端",
+        "ink_light": "江南宣纸",
+        "gamer": "主机奖杯",
+        "minecraft": "方块世界"
+      }
+    },
+    "position": {
+      "options": {
+        "top": "顶边通栏",
+        "bottom": "底边通栏",
+        "top-left": "左上角小窗",
+        "top-right": "右上角小窗",
+        "bottom-left": "左下角小窗",
+        "bottom-right": "右下角小窗"
+      }
+    },
+    "level": {
+      "options": {
+        "info": "普通",
+        "warn": "警告",
+        "error": "错误"
+      }
+    },
+    "speak": {
+      "options": {
+        "off": "关闭",
+        "ha": "HA 合成",
+        "tv": "电视朗读"
       }
     }
   }

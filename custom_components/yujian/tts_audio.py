@@ -26,9 +26,7 @@ class YujianTtsError(HomeAssistantError):
     """Raised when the audio could not be synthesized."""
 
 
-async def async_speech_text_url(
-    hass: HomeAssistant, engine: str, message: str
-) -> str:
+async def async_speech_text_url(hass: HomeAssistant, engine: str, message: str) -> str:
     """Synthesize ``message`` with ``engine`` and return an absolute audio URL."""
     message = message.strip()
     if not message:

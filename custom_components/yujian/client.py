@@ -6,9 +6,9 @@ import asyncio
 import json
 import logging
 from typing import Any
+from urllib.parse import quote
 
 import aiohttp
-
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -44,8 +44,11 @@ def _looks_like_base64(value: str) -> bool:
     URIs, raw base64 and whitespace-wrapped camera snapshots all land here.
     """
     head = value.strip()[:2048].lower()
-    return not (head.startswith("http://") or head.startswith("https://")
-                or head.startswith("file://"))
+    return not head.startswith(("http://", "https://", "file://"))
+
+
+class YujianConnectionError(YujianError):
+    """The device could not be reached; eligible for ADB recovery."""
 
 
 class YujianClient:
@@ -78,6 +81,11 @@ class YujianClient:
         """Return the base URL of the TV's HTTP server."""
         return f"http://{self._host}:{self._port}"
 
+    @property
+    def configuration_url(self) -> str:
+        """URL opened by HA device Visit link."""
+        return f"{self.base_url}/{quote(self._token, safe='')}/ui"
+
     def update(
         self,
         host: str | None = None,
@@ -104,9 +112,14 @@ class YujianClient:
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as resp:
                 if resp.status != 200:
                     raise YujianError(f"health check failed: HTTP {resp.status}")
-                return await resp.json()
-        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
-            raise YujianError(f"health check failed: {err}") from err
+                data = await resp.json()
+                if not isinstance(data, dict):
+                    raise YujianError("Invalid device health response")
+                return data
+        except ValueError as err:
+            raise YujianError("Device returned invalid JSON") from err
+        except (TimeoutError, aiohttp.ClientError) as err:
+            raise YujianConnectionError("Unable to connect to the device") from err
 
     async def async_notify(
         self,
@@ -124,6 +137,7 @@ class YujianClient:
         tts: bool | str | None = None,
         image_interval: int | None = None,
         queue: bool | None = None,
+        theme: str | None = None,
     ) -> None:
         """Push a banner to the TV.
 
@@ -170,6 +184,8 @@ class YujianClient:
             )
         if queue is not None:
             payload["queue"] = queue
+        if theme is not None:
+            payload["theme"] = theme
 
         url = f"{self.base_url}{NOTIFY_PATH_TEMPLATE.format(token=self._token)}"
         await self._async_post(url, payload)
@@ -178,9 +194,11 @@ class YujianClient:
         """Return the TV's recent notifications (app v1.3.0+, newest first)."""
         url = f"{self.base_url}{HISTORY_PATH_TEMPLATE.format(token=self._token)}"
         data = await self._async_get(url)
-        if isinstance(data, list):
-            return [item for item in data if isinstance(item, dict)]
-        return []
+        if not isinstance(data, list) or any(
+            not isinstance(item, dict) for item in data
+        ):
+            raise YujianError("Invalid notification history response")
+        return data[:20]
 
     async def async_set_config(
         self,
@@ -217,13 +235,16 @@ class YujianClient:
             ) as resp:
                 body = await resp.text()
                 if resp.status != 200:
-                    raise YujianError(f"HTTP {resp.status}: {body[:200]}")
-        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
-            raise YujianError(str(err)) from err
+                    raise YujianError(f"Device request failed: HTTP {resp.status}")
+        except (TimeoutError, aiohttp.ClientError) as err:
+            raise YujianConnectionError("Unable to connect to the device") from err
         try:
-            return json.loads(body)
-        except ValueError:
-            return None
+            result = json.loads(body)
+        except ValueError as err:
+            raise YujianError("Device returned invalid JSON") from err
+        if not isinstance(result, dict) or result.get("ok") is not True:
+            raise YujianError("Device rejected the request")
+        return result
 
     async def _async_get(self, url: str) -> Any:
         """GET and decode a JSON body, raise on any non-2xx answer."""
@@ -234,13 +255,13 @@ class YujianClient:
             ) as resp:
                 body = await resp.text()
                 if resp.status != 200:
-                    raise YujianError(f"HTTP {resp.status}: {body[:200]}")
-        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
-            raise YujianError(str(err)) from err
+                    raise YujianError(f"Device request failed: HTTP {resp.status}")
+        except (TimeoutError, aiohttp.ClientError) as err:
+            raise YujianConnectionError("Unable to connect to the device") from err
         try:
             return json.loads(body)
         except ValueError as err:
-            raise YujianError(f"响应不是合法 JSON: {body[:120]}") from err
+            raise YujianError("Device returned invalid JSON") from err
 
     # ------------------------------------------------------------------
     # Self healing

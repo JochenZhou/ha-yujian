@@ -21,7 +21,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from .client import YujianClient, YujianError
+from .client import YujianClient, YujianConnectionError, YujianError
 from .const import (
     CONF_TTS_ENTITY,
     DEFAULT_DURATION,
@@ -30,6 +30,7 @@ from .const import (
     LEGACY_NAMES,
 )
 from .coordinator import YujianCoordinator
+from .entity import device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -75,7 +76,9 @@ class YujianNotifyEntity(CoordinatorEntity[YujianCoordinator], NotifyEntity):
         name = DISPLAY_NAME if raw_name.startswith(LEGACY_NAMES) else raw_name
         self._attr_name = name
         self._attr_icon = "mdi:television"
-        self._attr_unique_id = entry.data.get(CONF_HOST, entry.entry_id)
+        self._attr_unique_id = entry.unique_id or entry.data.get(
+            CONF_HOST, entry.entry_id
+        )
         health = coordinator.data or {}
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._attr_unique_id)},
@@ -84,6 +87,11 @@ class YujianNotifyEntity(CoordinatorEntity[YujianCoordinator], NotifyEntity):
             model=health.get("model"),
             sw_version=health.get("version"),
         )
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Keep the existing device identity and current configuration URL."""
+        return device_info(self._entry, self.coordinator)
 
     @property
     def default_duration(self) -> int:
@@ -106,18 +114,20 @@ class YujianNotifyEntity(CoordinatorEntity[YujianCoordinator], NotifyEntity):
         data = self.coordinator.data
         if not data:
             return {}
-        attrs = dict(data)
+        attrs = {k: v for k, v in data.items() if k != "history_available"}
         last = attrs.get("last_notification")
         if isinstance(last, dict):
             # Flatten the newest history entry so automations can read it.
             attrs["last_title"] = last.get("title")
             attrs["last_text"] = last.get("text")
             attrs["last_level"] = last.get("level")
-            attrs["last_has_media"] = last.get("hasMedia")
+            attrs["last_has_media"] = last.get("has_media", last.get("hasMedia"))
             attrs["last_tts"] = last.get("tts")
             ts = last.get("timestamp")
             if isinstance(ts, (int, float)):
-                attrs["last_notified_at"] = dt_util.utc_from_timestamp(ts / 1000).isoformat()
+                attrs["last_notified_at"] = dt_util.utc_from_timestamp(
+                    ts / 1000
+                ).isoformat()
         return attrs
 
     async def async_push(
@@ -136,8 +146,15 @@ class YujianNotifyEntity(CoordinatorEntity[YujianCoordinator], NotifyEntity):
         tts: bool | str | None = None,
         image_interval: int | None = None,
         queue: bool | None = None,
+        theme: str | None = None,
     ) -> None:
         """Push a banner, reviving the TV app once if the first attempt fails."""
+        if not any(
+            str(value or "").strip() for value in (title, message, image, video)
+        ):
+            raise HomeAssistantError(
+                "At least one of title, message, image or video is required"
+            )
         kwargs = {
             "title": title,
             "message": message,
@@ -153,10 +170,11 @@ class YujianNotifyEntity(CoordinatorEntity[YujianCoordinator], NotifyEntity):
             "tts": tts,
             "image_interval": image_interval,
             "queue": queue,
+            "theme": theme,
         }
         try:
             await self._client.async_notify(**kwargs)
-        except YujianError as err:
+        except YujianConnectionError as err:
             _LOGGER.debug("第一次推送失败，尝试拉起电视上的服务后重试: %s", err)
             if not await self._client.async_revive():
                 raise HomeAssistantError(f"电视上的玉简服务不可用: {err}") from err
@@ -166,6 +184,9 @@ class YujianNotifyEntity(CoordinatorEntity[YujianCoordinator], NotifyEntity):
                 raise HomeAssistantError(
                     f"拉起服务后仍然无法推送通知: {retry_err}"
                 ) from retry_err
+        except YujianError as err:
+            raise HomeAssistantError(str(err)) from err
+        await self.coordinator.async_refresh()
 
     async def async_dismiss(self) -> None:
         """Close the banner currently shown on the TV."""
@@ -200,4 +221,5 @@ class YujianNotifyEntity(CoordinatorEntity[YujianCoordinator], NotifyEntity):
             tts=kwargs.get("tts"),
             image_interval=kwargs.get("image_interval"),
             queue=kwargs.get("queue"),
+            theme=kwargs.get("theme"),
         )

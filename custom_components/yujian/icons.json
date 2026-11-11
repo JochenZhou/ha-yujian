@@ -14,5 +14,52 @@
     "set_config": {
       "service": "mdi:tune-variant"
     }
+  },
+  "entity": {
+    "switch": {
+      "muted": {
+        "default": "mdi:volume-off",
+        "state": {
+          "on": "mdi:volume-off",
+          "off": "mdi:volume-high"
+        }
+      }
+    },
+    "select": {
+      "theme": {
+        "default": "mdi:palette"
+      },
+      "position": {
+        "default": "mdi:aspect-ratio"
+      }
+    },
+    "button": {
+      "dismiss": {
+        "default": "mdi:close-box-outline"
+      },
+      "refresh": {
+        "default": "mdi:refresh"
+      }
+    },
+    "binary_sensor": {
+      "banner": {
+        "default": "mdi:message-outline",
+        "state": {
+          "on": "mdi:message",
+          "off": "mdi:message-outline"
+        }
+      }
+    },
+    "sensor": {
+      "last_notification": {
+        "default": "mdi:message-text-clock-outline"
+      },
+      "history_count": {
+        "default": "mdi:history"
+      },
+      "uptime": {
+        "default": "mdi:timer-outline"
+      }
+    }
   }
 }
