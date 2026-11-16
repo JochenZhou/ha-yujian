@@ -33,6 +33,9 @@ HISTORY_PATH_TEMPLATE = "/{token}/history"
 # Path of the live-config endpoint: POST /{token}/config (App v1.3.0+)
 CONFIG_PATH_TEMPLATE = "/{token}/config"
 
+# Path of the token-protected playlist-catalog endpoint: POST /{token}/library
+LIBRARY_PATH_TEMPLATE = "/{token}/library"
+
 # Android package / component of the app on the TV, used to revive it via
 # ADB. These belong to the installed app and must not be renamed here.
 TV_PACKAGE = "com.zqc.tvnotify"
@@ -93,3 +96,22 @@ THEMES = (
 
 # Option key: which TTS entity the integration uses to synthesize speech.
 CONF_TTS_ENTITY = "tts_entity"
+
+# Option key: which MA media_player entity plays the picked playlist.
+# Empty means "auto-detect the first Music Assistant player".
+CONF_TARGET_ENTITY = "target_entity_id"
+
+# Option key: whether the playlist catalog is pushed to the TV at all.
+CONF_SYNC_PLAYLISTS = "sync_playlists"
+
+# Config data key: per-entry secret the TV presents on the play webhook.
+CONF_CALLBACK_TOKEN = "callback_token"
+
+# Webhook path the TV posts "play this playlist" requests to.
+PLAY_WEBHOOK_PATH = "/api/yujian/play"
+
+# How often the playlist catalog is refreshed and pushed (seconds).
+PLAYLIST_SYNC_INTERVAL_SEC = 300
+
+# Upper bound on the number of playlists pushed (keeps the payload light).
+MAX_PLAYLISTS = 200

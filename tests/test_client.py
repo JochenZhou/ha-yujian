@@ -154,6 +154,12 @@ class ClientContractTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(client_module.YujianError):
             await self.client.async_health()
 
+    async def test_send_library_posts_to_token_path(self):
+        await self.client.async_send_library({"version": 1, "playlists": []})
+        method, path, data = self.requests[-1]
+        self.assertEqual((method, path), ("POST", "/test-token/library"))
+        self.assertEqual(data, {"version": 1, "playlists": []})
+
 
 if __name__ == "__main__":
     unittest.main()

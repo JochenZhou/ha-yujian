@@ -15,6 +15,8 @@ integration, which is already configured for this TV).
 from __future__ import annotations
 
 import logging
+import secrets
+from datetime import timedelta
 from typing import Any
 
 import voluptuous as vol
@@ -26,9 +28,24 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.service import async_extract_entity_ids
 
 from .client import YujianClient, YujianError
-from .const import BANNER_POSITIONS, DISPLAY_NAME, DOMAIN, LEGACY_NAMES, THEMES
+from .const import (
+    BANNER_POSITIONS,
+    CONF_CALLBACK_TOKEN,
+    CONF_SYNC_PLAYLISTS,
+    CONF_TARGET_ENTITY,
+    DISPLAY_NAME,
+    DOMAIN,
+    LEGACY_NAMES,
+    MAX_PLAYLISTS,
+    PLAYLIST_SYNC_INTERVAL_SEC,
+    PLAY_WEBHOOK_PATH,
+    THEMES,
+)
 from .coordinator import YujianCoordinator
+from .media import async_list_playlists, fetch_covers, find_mass_player
+from .playlists import build_playlists_payload, fingerprint
 from .tts_audio import YujianTtsError, async_speech_text_url, speech_text_for
+from .webhook import YujianPlayView
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -124,6 +141,74 @@ SET_CONFIG_SCHEMA = vol.Schema(
     }
 )
 
+# Process-wide flag marking that the play webhook has been registered.
+_PLAY_VIEW_FLAG = f"{DOMAIN}__play_view"
+
+
+def _async_register_play_view(hass: HomeAssistant) -> None:
+    """Register the play webhook once per Home Assistant process."""
+    if hass.data.get(_PLAY_VIEW_FLAG):
+        return
+    hass.http.register_view(YujianPlayView(hass))
+    hass.data[_PLAY_VIEW_FLAG] = True
+
+
+def _play_callback(hass: HomeAssistant, token: str) -> dict[str, Any]:
+    """Build the callback URL + token handed to the TV."""
+    from homeassistant.helpers.network import get_url
+
+    base = get_url(hass, allow_ip=True, prefer_external=False).rstrip("/")
+    return {"url": f"{base}{PLAY_WEBHOOK_PATH}", "token": token}
+
+
+def _async_schedule_playlist_sync(
+    hass: HomeAssistant, entry: ConfigEntry, callback: dict[str, Any]
+) -> None:
+    """Push the playlist catalog now and every PLAYLIST_SYNC_INTERVAL_SEC."""
+    from homeassistant.helpers.event import async_track_time_interval
+
+    async def _push(_now=None):
+        await _async_push_playlists(hass, entry, callback)
+
+    entry.async_on_unload(
+        async_track_time_interval(
+            hass, _push, timedelta(seconds=PLAYLIST_SYNC_INTERVAL_SEC)
+        )
+    )
+    # First push is best-effort: the TV may still be waking up.
+    hass.async_create_task(_push())
+
+
+async def _async_push_playlists(
+    hass: HomeAssistant, entry: ConfigEntry, callback: dict[str, Any]
+) -> None:
+    """Browse MA playlists and push the catalog to the TV when it changed."""
+    runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    if not runtime:
+        return
+    entity_id = runtime.get("target_entity_id") or find_mass_player(hass)
+    if not entity_id:
+        _LOGGER.debug("未发现 Music Assistant 播放器，跳过歌单同步")
+        return
+    try:
+        playlists = await async_list_playlists(hass, entity_id)
+    except Exception as err:  # noqa: BLE001 - browse errors must not break setup
+        _LOGGER.debug("浏览 MA 歌单失败: %s", err)
+        return
+    if len(playlists) > MAX_PLAYLISTS:
+        playlists = playlists[:MAX_PLAYLISTS]
+    if fingerprint(playlists) == runtime.get("playlist_fingerprint"):
+        return
+    items = await fetch_covers(hass, playlists)
+    payload = build_playlists_payload(items, callback, entity_id)
+    try:
+        await runtime["client"].async_send_library(payload)
+    except YujianError as err:
+        _LOGGER.warning("推送歌单到电视失败: %s", err)
+        return
+    runtime["playlist_fingerprint"] = fingerprint(playlists)
+    _LOGGER.debug("已推送 %s 个歌单到电视", len(items))
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up 玉简 from a config entry."""
@@ -151,15 +236,33 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     coordinator = YujianCoordinator(hass, entry, client)
 
+    # A per-entry secret the TV presents on the play webhook. Generated once
+    # and persisted so a restart does not invalidate what the TV already knows.
+    callback_token = entry.data.get(CONF_CALLBACK_TOKEN)
+    if not callback_token:
+        callback_token = secrets.token_hex(16)
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_CALLBACK_TOKEN: callback_token}
+        )
+
+    target_entity_id = entry.options.get(CONF_TARGET_ENTITY) or find_mass_player(hass)
+
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         "entry": entry,
         "client": client,
         "coordinator": coordinator,
+        "callback_token": callback_token,
+        "target_entity_id": target_entity_id,
+        "playlist_fingerprint": None,
     }
     _async_migrate_display_name(hass, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _async_register_service(hass)
+
+    _async_register_play_view(hass)
+    if entry.options.get(CONF_SYNC_PLAYLISTS, True):
+        _async_schedule_playlist_sync(hass, entry, _play_callback(hass, callback_token))
 
     # A failed first refresh must still schedule future polling when TV is off.
     await coordinator.async_refresh()
@@ -190,6 +293,17 @@ async def _async_entry_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
             device.id, configuration_url=client.configuration_url
         )
     await runtime["coordinator"].async_refresh()
+
+    # Re-detect the MA player and push the catalog again so option changes
+    # (target entity, sync toggle) take effect without a restart.
+    runtime["target_entity_id"] = entry.options.get(
+        CONF_TARGET_ENTITY
+    ) or find_mass_player(hass)
+    runtime["playlist_fingerprint"] = None
+    if entry.options.get(CONF_SYNC_PLAYLISTS, True):
+        await _async_push_playlists(
+            hass, entry, _play_callback(hass, runtime["callback_token"])
+        )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

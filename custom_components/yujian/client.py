@@ -18,6 +18,7 @@ from .const import (
     DISMISS_PATH_TEMPLATE,
     HEALTH_PATH,
     HISTORY_PATH_TEMPLATE,
+    LIBRARY_PATH_TEMPLATE,
     MAX_DURATION,
     MAX_IMAGE_INTERVAL,
     MAX_MAX_DURATION,
@@ -199,6 +200,11 @@ class YujianClient:
         ):
             raise YujianError("Invalid notification history response")
         return data[:20]
+
+    async def async_send_library(self, payload: dict[str, Any]) -> None:
+        """Push the playlist catalog to the TV's /library endpoint."""
+        url = f"{self.base_url}{LIBRARY_PATH_TEMPLATE.format(token=self._token)}"
+        await self._async_post(url, payload)
 
     async def async_set_config(
         self,

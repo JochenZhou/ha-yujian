@@ -9,7 +9,14 @@ from homeassistant.config_entries import ConfigFlowResult, OptionsFlow
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_TOKEN
 from homeassistant.helpers import selector
 
-from .const import CONF_TTS_ENTITY, DEFAULT_DURATION, DEFAULT_PORT, DISPLAY_NAME
+from .const import (
+    CONF_SYNC_PLAYLISTS,
+    CONF_TARGET_ENTITY,
+    CONF_TTS_ENTITY,
+    DEFAULT_DURATION,
+    DEFAULT_PORT,
+    DISPLAY_NAME,
+)
 
 
 class YujianOptionsFlow(OptionsFlow):
@@ -57,5 +64,18 @@ class YujianOptionsFlow(OptionsFlow):
                 CONF_TTS_ENTITY,
                 description={"suggested_value": options.get(CONF_TTS_ENTITY)},
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="tts")),
+            # Which Music Assistant player plays the picked playlist. Leave
+            # empty to auto-detect the first music_assistant player.
+            vol.Optional(
+                CONF_TARGET_ENTITY,
+                description={"suggested_value": options.get(CONF_TARGET_ENTITY)},
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="media_player")
+            ),
+            # Push the playlist catalog to the TV (and accept its play requests).
+            vol.Optional(
+                CONF_SYNC_PLAYLISTS,
+                default=options.get(CONF_SYNC_PLAYLISTS, True),
+            ): vol.Boolean(),
         }
         return self.async_show_form(step_id="init", data_schema=vol.Schema(schema))
