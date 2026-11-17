@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import secrets
+import time
 from datetime import timedelta
 from typing import Any
 
@@ -37,12 +38,18 @@ from .const import (
     DOMAIN,
     LEGACY_NAMES,
     MAX_PLAYLISTS,
+    PLAYLIST_REPUSH_SEC,
     PLAYLIST_SYNC_INTERVAL_SEC,
     PLAY_WEBHOOK_PATH,
     THEMES,
 )
 from .coordinator import YujianCoordinator
-from .media import async_list_playlists, fetch_covers, find_mass_player
+from .media import (
+    async_list_playlists,
+    fetch_covers,
+    find_browse_player,
+    find_mass_player,
+)
 from .playlists import build_playlists_payload, fingerprint
 from .tts_audio import YujianTtsError, async_speech_text_url, speech_text_for
 from .webhook import YujianPlayView
@@ -182,31 +189,53 @@ def _async_schedule_playlist_sync(
 async def _async_push_playlists(
     hass: HomeAssistant, entry: ConfigEntry, callback: dict[str, Any]
 ) -> None:
-    """Browse MA playlists and push the catalog to the TV when it changed."""
+    """Browse MA playlists and push the catalog to the TV.
+
+    A push happens when the catalog changed or when the last successful push is
+    older than ``PLAYLIST_REPUSH_SEC``: the TV keeps the catalog in memory only,
+    so it loses it on every app restart and must be fed again.
+    """
     runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id)
     if not runtime:
         return
-    entity_id = runtime.get("target_entity_id") or find_mass_player(hass)
-    if not entity_id:
-        _LOGGER.debug("未发现 Music Assistant 播放器，跳过歌单同步")
+    preferred = runtime.get("target_entity_id")
+    browse_entity = find_browse_player(hass, preferred)
+    if not browse_entity:
+        # Any offline Music Assistant player fails a browse, so this is the
+        # real "cannot sync" condition worth surfacing once.
+        if not runtime.get("playlist_warned"):
+            runtime["playlist_warned"] = True
+            _LOGGER.warning(
+                "未发现可用的 Music Assistant 播放器，歌单无法同步到电视；"
+                "请确认 Music Assistant 集成已加载且至少有一个播放器在线"
+            )
         return
     try:
-        playlists = await async_list_playlists(hass, entity_id)
+        playlists = await async_list_playlists(hass, browse_entity)
     except Exception as err:  # noqa: BLE001 - browse errors must not break setup
         _LOGGER.debug("浏览 MA 歌单失败: %s", err)
         return
     if len(playlists) > MAX_PLAYLISTS:
         playlists = playlists[:MAX_PLAYLISTS]
-    if fingerprint(playlists) == runtime.get("playlist_fingerprint"):
+    runtime["playlist_warned"] = False
+
+    now = time.monotonic()
+    last_push = runtime.get("playlist_pushed_at")
+    unchanged = fingerprint(playlists) == runtime.get("playlist_fingerprint")
+    if unchanged and last_push is not None and now - last_push < PLAYLIST_REPUSH_SEC:
         return
-    items = await fetch_covers(hass, playlists)
-    payload = build_playlists_payload(items, callback, entity_id)
+
+    cache = runtime.setdefault("playlist_covers", {})
+    items = await fetch_covers(hass, playlists, cache)
+    play_target = runtime.get("target_entity_id") or find_mass_player(hass) or browse_entity
+    payload = build_playlists_payload(items, callback, play_target)
     try:
         await runtime["client"].async_send_library(payload)
     except YujianError as err:
         _LOGGER.warning("推送歌单到电视失败: %s", err)
         return
     runtime["playlist_fingerprint"] = fingerprint(playlists)
+    runtime["playlist_pushed_at"] = now
     _LOGGER.debug("已推送 %s 个歌单到电视", len(items))
 
 

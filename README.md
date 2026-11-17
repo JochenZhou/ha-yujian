@@ -139,12 +139,12 @@ target:
 
 电视端玉简 App（含歌单页的新版本）可以把 Music Assistant 的歌单列表显示在 **播放器设置 → 浏览歌单** 里，选中一张即整张播放。整条链路经 HA 中转，电视端零新增凭证：
 
-1. 前提：已在 Home Assistant 配置好 **Music Assistant** 集成，生成了 `media_player.music_assistant_*` 实体。
-2. 进入玉简集成的 **配置**，可选填「目标播放器」：默认自动探测第一个 Music Assistant 播放器；有多个播放器时请手动指定电视对应的那一个。
-3. 「同步歌单」默认开启：集成每 5 分钟浏览一次 MA 歌单，把歌单名与封面推送到电视的 `POST /{token}/library`。
+1. 前提：已在 Home Assistant 配置好 **Music Assistant** 集成，并且至少有一个 MA 播放器在线（实体名由播放器名称决定，例如 `media_player.ke_ting_akubox`，没有固定前缀）。
+2. 进入玉简集成的 **配置**，可选填「目标播放器」：默认自动探测第一个可用的 Music Assistant 播放器；想让歌单在电视上播放时，请手动指定电视对应的那一个。
+3. 「同步歌单」默认开启：集成每 5 分钟浏览一次 MA 歌单，把歌单名与封面推送到电视的 `POST /{token}/library`；歌单没变化时也会每 10 分钟重推一次，因为电视端只在内存里保存目录，App 重启后需要重新接收。
 4. 电视选中歌单后，回呼 `POST /api/yujian/play`（带集成生成的 token），HA 侧调用 `media_player.play_media` 播放整张歌单。
 
-歌单浏览与点播都复用 HA 的 Music Assistant 集成，不需要给电视单独配置 MA 地址或 token，也不占用 Sendspin 协议。电视端尚未更新到带歌单页的版本时，推送会得到 404，集成仅记录告警，不影响其它功能。
+歌单浏览与点播都复用 HA 的 Music Assistant 集成，不需要给电视单独配置 MA 地址或 token，也不占用 Sendspin 协议。电视端尚未更新到带歌单页的版本时，推送会得到 404，集成仅记录告警，不影响其它功能。若日志出现「未发现可用的 Music Assistant 播放器」，说明所有 MA 播放器都处于不可用状态，歌单无法浏览。
 
 ## 故障排查
 

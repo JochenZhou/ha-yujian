@@ -18,30 +18,94 @@ from .playlists import playlist_item
 
 _LOGGER = logging.getLogger(__name__)
 
-# HA entity id prefix of Music Assistant players.
+# Entity-registry platform of the Music Assistant integration. The entity ids
+# themselves are derived from the player name (``media_player.ke_ting_akubox``)
+# and carry no fixed prefix, so the registry is the only reliable source.
+MASS_PLATFORM = "music_assistant"
+
+# Legacy prefix, kept as a fallback when the entity registry is unavailable.
 MASS_PREFIX = "media_player.music_assistant_"
 
 # media_content_type the MA integration uses to address its own source.
 MASS_SOURCE_TYPE = "music_assistant"
 
+# States that mean "this player cannot answer a browse request right now".
+UNAVAILABLE_STATES = ("unavailable", "unknown")
+
 # Largest cover accepted before we drop it (a thumbnail is usually a few KB).
 MAX_COVER_BYTES = 2 * 1024 * 1024
 
 
-def find_mass_player(hass, preferred: str | None = None) -> str | None:
-    """Return the MA media_player entity to use.
+def registry_entries(hass):
+    """Return the entity-registry entries, or an empty list when unavailable.
 
-    ``preferred`` wins when it still exists; otherwise the first
-    ``music_assistant_*`` entity (sorted, missing ones skipped) is used.
+    Isolated in its own function so tests can substitute a fake registry.
     """
+    from homeassistant.helpers import entity_registry as er
+
+    return list(er.async_get(hass).entities.values())
+
+
+def mass_player_entities(hass) -> list[str]:
+    """Return every enabled media_player entity owned by Music Assistant."""
+    found: set[str] = set()
+    try:
+        entries = registry_entries(hass)
+    except Exception:  # noqa: BLE001 - registry is optional for this feature
+        entries = []
+    for entry in entries:
+        if entry.domain != "media_player" or entry.platform != MASS_PLATFORM:
+            continue
+        if entry.disabled_by is not None or entry.hidden_by is not None:
+            continue
+        if hass.states.get(entry.entity_id) is None:
+            continue
+        found.add(entry.entity_id)
+    if not found:
+        found = {
+            entity_id
+            for entity_id in hass.states.async_entity_ids("media_player")
+            if entity_id.startswith(MASS_PREFIX) and hass.states.get(entity_id)
+        }
+    return sorted(found)
+
+
+def is_available(hass, entity_id: str | None) -> bool:
+    """Return True when the entity exists and is not unavailable."""
+    if not entity_id:
+        return False
+    state = hass.states.get(entity_id)
+    return state is not None and state.state not in UNAVAILABLE_STATES
+
+
+def find_mass_player(hass, preferred: str | None = None) -> str | None:
+    """Return the MA media_player entity to use for playback.
+
+    ``preferred`` wins whenever it still exists (a paused or standby TV must
+    stay the play target); otherwise the first available player is used.
+    """
+    candidates = mass_player_entities(hass)
     if preferred and hass.states.get(preferred) is not None:
         return preferred
-    candidates = sorted(
+    available = [entity_id for entity_id in candidates if is_available(hass, entity_id)]
+    pool = available or candidates
+    return pool[0] if pool else None
+
+
+def find_browse_player(hass, preferred: str | None = None) -> str | None:
+    """Return the MA entity to browse with, skipping players that are offline.
+
+    The playlist library is source-level, so any online Music Assistant player
+    can browse it; picking one that is unavailable would fail the request.
+    """
+    if preferred and is_available(hass, preferred):
+        return preferred
+    available = [
         entity_id
-        for entity_id in hass.states.async_entity_ids("media_player")
-        if entity_id.startswith(MASS_PREFIX) and hass.states.get(entity_id) is not None
-    )
-    return candidates[0] if candidates else None
+        for entity_id in mass_player_entities(hass)
+        if is_available(hass, entity_id)
+    ]
+    return available[0] if available else None
 
 
 def _unwrap(response: Any, entity_id: str) -> dict[str, Any]:
@@ -145,13 +209,27 @@ async def async_fetch_cover_b64(hass, url: str | None) -> str | None:
     return f"data:{mime};base64," + base64.b64encode(data).decode("ascii")
 
 
-async def fetch_covers(hass, playlists: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Attach base64 covers to the playlist list with bounded concurrency."""
+async def fetch_covers(
+    hass,
+    playlists: list[dict[str, Any]],
+    cache: dict[str, str | None] | None = None,
+) -> list[dict[str, Any]]:
+    """Attach base64 covers to the playlist list with bounded concurrency.
+
+    ``cache`` maps playlist id to an already downloaded data URI (or None when
+    the cover is missing) so a periodic re-push does not refetch every image.
+    """
     sem = asyncio.Semaphore(5)
 
     async def _one(item: dict[str, Any]) -> dict[str, Any]:
-        async with sem:
-            cover = await async_fetch_cover_b64(hass, item.get("thumbnail"))
-        return playlist_item(item["name"], item["id"], cover_b64=cover)
+        media_id = item["id"]
+        if cache is not None and media_id in cache:
+            cover = cache[media_id]
+        else:
+            async with sem:
+                cover = await async_fetch_cover_b64(hass, item.get("thumbnail"))
+            if cache is not None:
+                cache[media_id] = cover
+        return playlist_item(item["name"], media_id, cover_b64=cover)
 
     return await asyncio.gather(*(_one(item) for item in playlists))
