@@ -50,7 +50,7 @@ from .media import (
     find_browse_player,
     find_mass_player,
 )
-from .playlists import build_playlists_payload, fingerprint
+from .playlists import fingerprint, fit_payload
 from .tts_audio import YujianTtsError, async_speech_text_url, speech_text_for
 from .webhook import YujianPlayView
 
@@ -228,7 +228,7 @@ async def _async_push_playlists(
     cache = runtime.setdefault("playlist_covers", {})
     items = await fetch_covers(hass, playlists, cache)
     play_target = runtime.get("target_entity_id") or find_mass_player(hass) or browse_entity
-    payload = build_playlists_payload(items, callback, play_target)
+    payload = fit_payload(items, callback, play_target)
     try:
         await runtime["client"].async_send_library(payload)
     except YujianError as err:

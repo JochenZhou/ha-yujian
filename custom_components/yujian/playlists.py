@@ -6,10 +6,15 @@ tested in isolation; it only assembles plain dicts.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 # Schema version of the /library payload; the TV app can reject unknown ones.
 PAYLOAD_VERSION = 1
+
+# The TV refuses a request body larger than 4 MB; keep a margin for the JSON
+# envelope so a big catalog still lands.
+MAX_PAYLOAD_BYTES = 3_500_000
 
 
 def playlist_item(
@@ -47,3 +52,29 @@ def build_playlists_payload(
 def fingerprint(playlists: list[dict[str, Any]]) -> tuple[tuple[str, Any], ...]:
     """Return a stable identity of the catalog so unchanged lists skip re-push."""
     return tuple(sorted((item.get("id"), item.get("name")) for item in playlists))
+
+
+def payload_bytes(payload: dict[str, Any]) -> int:
+    """Return the UTF-8 size of the serialized payload."""
+    return len(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+
+
+def fit_payload(
+    playlists: list[dict[str, Any]],
+    callback: dict[str, Any],
+    target_entity_id: str | None,
+    limit: int = MAX_PAYLOAD_BYTES,
+) -> dict[str, Any]:
+    """Build the /library payload, dropping covers if the body would be too big.
+
+    Covers are the only heavy field; a catalog without them always fits, and the
+    TV still renders placeholders from the playlist names.
+    """
+    payload = build_playlists_payload(playlists, callback, target_entity_id)
+    if payload_bytes(payload) <= limit:
+        return payload
+    stripped = [
+        {key: value for key, value in item.items() if key != "cover_b64"}
+        for item in playlists
+    ]
+    return build_playlists_payload(stripped, callback, target_entity_id)

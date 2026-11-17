@@ -35,6 +35,29 @@ UNAVAILABLE_STATES = ("unavailable", "unknown")
 # Largest cover accepted before we drop it (a thumbnail is usually a few KB).
 MAX_COVER_BYTES = 2 * 1024 * 1024
 
+# Covers are re-encoded before they travel to the TV: Music Assistant hands out
+# artwork at up to a megabyte each and the TV rejects a body over 4 MB, so a
+# 27-playlist catalog would never fit with full-size images.
+COVER_MAX_PIXELS = 320
+COVER_JPEG_QUALITY = 80
+
+
+def shrink_cover(data: bytes, mime: str) -> tuple[bytes, str]:
+    """Downscale an image to a small JPEG; return the input untouched on error."""
+    try:
+        import io
+
+        from PIL import Image
+
+        with Image.open(io.BytesIO(data)) as img:
+            frame = img.convert("RGB")
+            frame.thumbnail((COVER_MAX_PIXELS, COVER_MAX_PIXELS))
+            buffer = io.BytesIO()
+            frame.save(buffer, format="JPEG", quality=COVER_JPEG_QUALITY, optimize=True)
+            return buffer.getvalue(), "image/jpeg"
+    except Exception:  # noqa: BLE001 - a broken cover must not drop the playlist
+        return data, mime
+
 
 def registry_entries(hass):
     """Return the entity-registry entries, or an empty list when unavailable.
@@ -185,13 +208,21 @@ async def async_play_playlist(hass, entity_id: str, uri: str) -> None:
     )
 
 
+def clients_session(hass):
+    """Return Home Assistant's shared aiohttp session.
+
+    Isolated so tests can substitute a fake session.
+    """
+    from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+    return async_get_clientsession(hass)
+
+
 async def async_fetch_cover_b64(hass, url: str | None) -> str | None:
     """Download a thumbnail and return it as a data URI, or None on failure."""
     if not isinstance(url, str) or not url.startswith(("http://", "https://")):
         return None
-    from homeassistant.helpers.aiohttp_client import async_get_clientsession
-
-    session = async_get_clientsession(hass)
+    session = clients_session(hass)
     try:
         async with session.get(url, timeout=aiohttp.ClientTimeout(total=6)) as resp:
             if resp.status != 200:
@@ -206,6 +237,7 @@ async def async_fetch_cover_b64(hass, url: str | None) -> str | None:
         return None
     if not data or len(data) > MAX_COVER_BYTES:
         return None
+    data, mime = shrink_cover(data, mime)
     return f"data:{mime};base64," + base64.b64encode(data).decode("ascii")
 
 

@@ -223,6 +223,42 @@ class CoverTests(unittest.IsolatedAsyncioTestCase):
         fetch.assert_not_called()
         self.assertEqual(items[0]["cover_b64"], "data:image/jpeg;base64,AA")
 
+    async def test_cover_is_shrunk_to_small_jpeg(self):
+        import io
+
+        from PIL import Image
+
+        buffer = io.BytesIO()
+        Image.new("RGB", (1600, 1600), (200, 30, 30)).save(buffer, format="PNG")
+        big = buffer.getvalue()
+
+        class Response:
+            status = 200
+            headers = {"Content-Type": "image/png"}
+
+            def __init__(self, data):
+                self._data = data
+
+            async def read(self):
+                return self._data
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+        class Session:
+            def get(self, url, timeout=None):
+                return Response(big)
+
+        hass = _hass()
+        with patch.object(media, "clients_session", return_value=Session()):
+            uri = await media.async_fetch_cover_b64(hass, "http://x/big.png")
+        self.assertTrue(uri.startswith("data:image/jpeg;base64,"))
+        self.assertLess(len(uri), len(big))
+        self.assertLess(len(uri), 40_000)
+
     async def test_cover_cache_records_missing_cover(self):
         playlists = [
             {"id": "library://playlist/2", "name": "b", "thumbnail": None},

@@ -63,6 +63,30 @@ class PlaylistPayloadTests(unittest.TestCase):
         b = [{"id": "library://playlist/1", "name": "renamed"}]
         self.assertNotEqual(playlists.fingerprint(a), playlists.fingerprint(b))
 
+    def test_fit_payload_keeps_covers_when_small(self):
+        items = [
+            {
+                "id": "library://playlist/1",
+                "name": "x",
+                "cover_b64": "data:image/jpeg;base64,AA",
+            }
+        ]
+        payload = playlists.fit_payload(items, {"url": "u", "token": "t"}, "media_player.a")
+        self.assertEqual(payload["playlists"][0]["cover_b64"], "data:image/jpeg;base64,AA")
+
+    def test_fit_payload_drops_covers_when_too_big(self):
+        cover = "data:image/jpeg;base64," + "A" * 100_000
+        items = [
+            {"id": f"library://playlist/{i}", "name": f"p{i}", "cover_b64": cover}
+            for i in range(100)
+        ]
+        payload = playlists.fit_payload(
+            items, {"url": "u", "token": "t"}, "media_player.a", limit=3_500_000
+        )
+        self.assertEqual(len(payload["playlists"]), 100)
+        self.assertTrue(all("cover_b64" not in item for item in payload["playlists"]))
+        self.assertLessEqual(playlists.payload_bytes(payload), 3_500_000)
+
 
 if __name__ == "__main__":
     unittest.main()
