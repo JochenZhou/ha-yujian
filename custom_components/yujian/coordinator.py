@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from datetime import timedelta
 
 from homeassistant.helpers import device_registry as dr
@@ -26,6 +27,10 @@ class YujianCoordinator(DataUpdateCoordinator):
         )
         self.client = client
         self.entry = entry
+        # Called when the TV's app uptime goes backwards, i.e. the app (and its
+        # in-memory playlist catalog) restarted between two polls.
+        self.on_device_restart: Callable[[], None] | None = None
+        self._last_uptime: float | None = None
 
     async def _async_update_data(self):
         try:
@@ -34,6 +39,7 @@ class YujianCoordinator(DataUpdateCoordinator):
             raise UpdateFailed(str(err)) from err
         if data.get("ok") is not True:
             raise UpdateFailed("Invalid device health response")
+        self._async_note_uptime(data)
         try:
             history = await self.client.async_history()
         except YujianError:
@@ -60,3 +66,21 @@ class YujianCoordinator(DataUpdateCoordinator):
                 configuration_url=self.client.configuration_url,
             )
         return data
+
+    def _async_note_uptime(self, data) -> None:
+        """Fire the restart hook when the TV app restarted since the last poll.
+
+        ``/health`` reports the app process uptime in seconds; a smaller value
+        than last time means the app was restarted (and its playlist catalog,
+        which lives in memory, is gone).
+        """
+        uptime = data.get("uptime")
+        if not isinstance(uptime, (int, float)):
+            return
+        previous = self._last_uptime
+        self._last_uptime = float(uptime)
+        if previous is None or uptime >= previous:
+            return
+        _LOGGER.debug("电视 App 已重启（uptime %s → %s），准备重推歌单", previous, uptime)
+        if self.on_device_restart is not None:
+            self.on_device_restart()

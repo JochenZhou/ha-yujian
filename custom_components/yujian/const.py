@@ -113,9 +113,5 @@ PLAY_WEBHOOK_PATH = "/api/yujian/play"
 # How often the playlist catalog is refreshed and pushed (seconds).
 PLAYLIST_SYNC_INTERVAL_SEC = 300
 
-# Push the catalog again after this long even when nothing changed: the TV
-# keeps it in memory, so a restarted app needs the whole list re-sent.
-PLAYLIST_REPUSH_SEC = 600
-
 # Upper bound on the number of playlists pushed (keeps the payload light).
 MAX_PLAYLISTS = 200

@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import logging
 import secrets
-import time
 from datetime import timedelta
 from typing import Any
 
@@ -38,7 +37,6 @@ from .const import (
     DOMAIN,
     LEGACY_NAMES,
     MAX_PLAYLISTS,
-    PLAYLIST_REPUSH_SEC,
     PLAYLIST_SYNC_INTERVAL_SEC,
     PLAY_WEBHOOK_PATH,
     THEMES,
@@ -50,7 +48,7 @@ from .media import (
     find_browse_player,
     find_mass_player,
 )
-from .playlists import fingerprint, fit_payload
+from .playlists import fit_payload
 from .tts_audio import YujianTtsError, async_speech_text_url, speech_text_for
 from .webhook import YujianPlayView
 
@@ -191,9 +189,8 @@ async def _async_push_playlists(
 ) -> None:
     """Browse MA playlists and push the catalog to the TV.
 
-    A push happens when the catalog changed or when the last successful push is
-    older than ``PLAYLIST_REPUSH_SEC``: the TV keeps the catalog in memory only,
-    so it loses it on every app restart and must be fed again.
+    The catalog is pushed on every call: the TV keeps it in memory only, so it
+    loses it on every app restart and cannot be trusted to still hold one.
     """
     runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id)
     if not runtime:
@@ -219,12 +216,9 @@ async def _async_push_playlists(
         playlists = playlists[:MAX_PLAYLISTS]
     runtime["playlist_warned"] = False
 
-    now = time.monotonic()
-    last_push = runtime.get("playlist_pushed_at")
-    unchanged = fingerprint(playlists) == runtime.get("playlist_fingerprint")
-    if unchanged and last_push is not None and now - last_push < PLAYLIST_REPUSH_SEC:
-        return
-
+    # Push on every tick: the TV keeps the catalog in memory only, so we cannot
+    # know it still has one. Covers are cached, so the repeat cost is one small
+    # LAN request, and a restarted app is fed again within the poll interval.
     cache = runtime.setdefault("playlist_covers", {})
     items = await fetch_covers(hass, playlists, cache)
     play_target = runtime.get("target_entity_id") or find_mass_player(hass) or browse_entity
@@ -234,8 +228,7 @@ async def _async_push_playlists(
     except YujianError as err:
         _LOGGER.warning("推送歌单到电视失败: %s", err)
         return
-    runtime["playlist_fingerprint"] = fingerprint(playlists)
-    runtime["playlist_pushed_at"] = now
+    runtime["playlist_count"] = len(items)
     _LOGGER.debug("已推送 %s 个歌单到电视", len(items))
 
 
@@ -283,7 +276,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "coordinator": coordinator,
         "callback_token": callback_token,
         "target_entity_id": target_entity_id,
-        "playlist_fingerprint": None,
+        "playlist_covers": {},
     }
     _async_migrate_display_name(hass, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -291,7 +284,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _async_register_play_view(hass)
     if entry.options.get(CONF_SYNC_PLAYLISTS, True):
-        _async_schedule_playlist_sync(hass, entry, _play_callback(hass, callback_token))
+        callback = _play_callback(hass, callback_token)
+        _async_schedule_playlist_sync(hass, entry, callback)
+
+        # The TV stores the catalog in memory only, so an app restart empties
+        # it. /health exposes the app uptime, which reveals a restart within one
+        # poll (60 s) and lets us feed the catalog again right away.
+        def _on_tv_restart(_entry_id: str = entry.entry_id) -> None:
+            hass.async_create_task(_async_push_playlists(hass, entry, callback))
+
+        coordinator.on_device_restart = _on_tv_restart
 
     # A failed first refresh must still schedule future polling when TV is off.
     await coordinator.async_refresh()
@@ -328,7 +330,7 @@ async def _async_entry_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
     runtime["target_entity_id"] = entry.options.get(
         CONF_TARGET_ENTITY
     ) or find_mass_player(hass)
-    runtime["playlist_fingerprint"] = None
+    runtime["playlist_covers"] = {}
     if entry.options.get(CONF_SYNC_PLAYLISTS, True):
         await _async_push_playlists(
             hass, entry, _play_callback(hass, runtime["callback_token"])
