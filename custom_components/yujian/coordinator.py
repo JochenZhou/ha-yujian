@@ -10,7 +10,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .client import YujianClient, YujianError
-from .const import DOMAIN
+from .const import CONF_MODEL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL_SEC = 60
@@ -40,6 +40,7 @@ class YujianCoordinator(DataUpdateCoordinator):
         if data.get("ok") is not True:
             raise UpdateFailed("Invalid device health response")
         self._async_note_uptime(data)
+        self._async_note_model(data)
         try:
             history = await self.client.async_history()
         except YujianError:
@@ -84,3 +85,20 @@ class YujianCoordinator(DataUpdateCoordinator):
         _LOGGER.debug("电视 App 已重启（uptime %s → %s），准备重推歌单", previous, uptime)
         if self.on_device_restart is not None:
             self.on_device_restart()
+
+    def _async_note_model(self, data) -> None:
+        """Persist the TV's model string when /health reports one.
+
+        Newer app versions include ``model`` in ``/health``, which is what lets
+        the play webhook resolve the TV's own Music Assistant player without the
+        user picking one by hand.
+        """
+        model = data.get("model")
+        if not isinstance(model, str):
+            return
+        model = model.strip()
+        if not model or model == self.entry.data.get(CONF_MODEL):
+            return
+        self.hass.config_entries.async_update_entry(
+            self.entry, data={**self.entry.data, CONF_MODEL: model}
+        )

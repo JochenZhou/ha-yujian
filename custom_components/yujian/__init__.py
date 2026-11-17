@@ -31,6 +31,7 @@ from .client import YujianClient, YujianError
 from .const import (
     BANNER_POSITIONS,
     CONF_CALLBACK_TOKEN,
+    CONF_MODEL,
     CONF_SYNC_PLAYLISTS,
     CONF_TARGET_ENTITY,
     DISPLAY_NAME,
@@ -46,7 +47,7 @@ from .media import (
     async_list_playlists,
     fetch_covers,
     find_browse_player,
-    find_mass_player,
+    find_owned_player,
 )
 from .playlists import fit_payload
 from .tts_audio import YujianTtsError, async_speech_text_url, speech_text_for
@@ -221,7 +222,11 @@ async def _async_push_playlists(
     # LAN request, and a restarted app is fed again within the poll interval.
     cache = runtime.setdefault("playlist_covers", {})
     items = await fetch_covers(hass, playlists, cache)
-    play_target = runtime.get("target_entity_id") or find_mass_player(hass) or browse_entity
+    play_target = (
+        runtime.get("target_entity_id")
+        or find_owned_player(hass, entry.data.get(CONF_MODEL))
+        or browse_entity
+    )
     payload = fit_payload(items, callback, play_target)
     try:
         await runtime["client"].async_send_library(payload)
@@ -267,7 +272,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry, data={**entry.data, CONF_CALLBACK_TOKEN: callback_token}
         )
 
-    target_entity_id = entry.options.get(CONF_TARGET_ENTITY) or find_mass_player(hass)
+    # No automatic fallback to "the first Music Assistant player": with several
+    # players around that silently plays the wrong room. An unset option leaves
+    # the play target to the model match resolved per request (see webhook).
+    target_entity_id = entry.options.get(CONF_TARGET_ENTITY)
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
@@ -327,9 +335,7 @@ async def _async_entry_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
     # Re-detect the MA player and push the catalog again so option changes
     # (target entity, sync toggle) take effect without a restart.
-    runtime["target_entity_id"] = entry.options.get(
-        CONF_TARGET_ENTITY
-    ) or find_mass_player(hass)
+    runtime["target_entity_id"] = entry.options.get(CONF_TARGET_ENTITY)
     runtime["playlist_covers"] = {}
     if entry.options.get(CONF_SYNC_PLAYLISTS, True):
         await _async_push_playlists(

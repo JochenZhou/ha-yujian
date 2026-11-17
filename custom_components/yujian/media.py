@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+import re
 from typing import Any
 
 import aiohttp
@@ -113,6 +114,37 @@ def find_mass_player(hass, preferred: str | None = None) -> str | None:
     available = [entity_id for entity_id in candidates if is_available(hass, entity_id)]
     pool = available or candidates
     return pool[0] if pool else None
+
+
+def find_owned_player(hass, model: str | None) -> str | None:
+    """Return the Music Assistant player that belongs to this TV model.
+
+    Music Assistant names a Sendspin player after the app's client name, which
+    defaults to ``玉简·<Build.MODEL>`` (e.g. ``media_player.yu_jian_tb371fc``).
+    Matching the TV's own model against the entity id / friendly name picks the
+    TV that asked, instead of whichever MA player happens to sort first.
+    """
+    needle = _normalise_token(model)
+    if len(needle) < 4:
+        # Too short to identify anything ("tv", "h6") - would match at random.
+        return None
+    matches: list[str] = []
+    for entity_id in mass_player_entities(hass):
+        state = hass.states.get(entity_id)
+        names = [entity_id, getattr(state, "name", "") or ""]
+        attributes = getattr(state, "attributes", None) or {}
+        names.append(str(attributes.get("friendly_name") or ""))
+        if any(needle in _normalise_token(name) for name in names):
+            matches.append(entity_id)
+    if not matches:
+        return None
+    available = [entity_id for entity_id in matches if is_available(hass, entity_id)]
+    return (available or matches)[0]
+
+
+def _normalise_token(value: str | None) -> str:
+    """Lowercase and drop punctuation so ``MiTV4-ANSM0`` matches its slug."""
+    return re.sub(r"[^a-z0-9]", "", (value or "").lower())
 
 
 def find_browse_player(hass, preferred: str | None = None) -> str | None:

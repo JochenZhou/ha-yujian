@@ -104,6 +104,10 @@ CONF_TARGET_ENTITY = "target_entity_id"
 # Option key: whether the playlist catalog is pushed to the TV at all.
 CONF_SYNC_PLAYLISTS = "sync_playlists"
 
+# Config data key: the TV's own model string (mDNS TXT ``model`` or /health),
+# used to pick the Music Assistant player that belongs to this TV.
+CONF_MODEL = "model"
+
 # Config data key: per-entry secret the TV presents on the play webhook.
 CONF_CALLBACK_TOKEN = "callback_token"
 

@@ -17,8 +17,9 @@ media = importlib.import_module("yujian_media_test.media")
 
 
 class FakeState:
-    def __init__(self, state="idle"):
+    def __init__(self, state="idle", friendly_name=None):
         self.state = state
+        self.attributes = {"friendly_name": friendly_name} if friendly_name else {}
 
 
 class FakeStates:
@@ -140,6 +141,64 @@ class FindPlayerTests(unittest.TestCase):
         hass = _hass(entities=_states(("media_player.sonos", "idle")))
         with patch.object(media, "registry_entries", return_value=[]):
             self.assertIsNone(media.find_mass_player(hass))
+
+
+class OwnedPlayerTests(unittest.TestCase):
+    """The TV that asked must decide where its playlist plays."""
+
+    def test_matches_entity_by_model_with_punctuation(self):
+        hass = _hass(entities=_states(("media_player.yu_jian_mitv4_ansm0", "idle")))
+        with patch.object(media, "registry_entries", return_value=[
+            _entry("media_player.yu_jian_mitv4_ansm0"),
+        ]):
+            self.assertEqual(
+                media.find_owned_player(hass, "MiTV4-ANSM0"),
+                "media_player.yu_jian_mitv4_ansm0",
+            )
+
+    def test_does_not_pick_other_players(self):
+        """A sound box in another room must never be chosen for a TV."""
+        hass = _hass(entities=_states(
+            ("media_player.akubox", "idle"),
+            ("media_player.yu_jian_tb371fc", "idle"),
+        ))
+        with patch.object(media, "registry_entries", return_value=[
+            _entry("media_player.akubox"),
+            _entry("media_player.yu_jian_tb371fc"),
+        ]):
+            self.assertEqual(
+                media.find_owned_player(hass, "TB371FC"), "media_player.yu_jian_tb371fc"
+            )
+
+    def test_returns_none_when_no_player_matches(self):
+        hass = _hass(entities=_states(("media_player.akubox", "idle")))
+        with patch.object(media, "registry_entries", return_value=[
+            _entry("media_player.akubox"),
+        ]):
+            self.assertIsNone(media.find_owned_player(hass, "TB371FC"))
+
+    def test_ignores_short_or_empty_model(self):
+        hass = _hass(entities=_states(("media_player.yu_jian_tv", "idle")))
+        with patch.object(media, "registry_entries", return_value=[
+            _entry("media_player.yu_jian_tv"),
+        ]):
+            self.assertIsNone(media.find_owned_player(hass, "TV"))
+            self.assertIsNone(media.find_owned_player(hass, ""))
+            self.assertIsNone(media.find_owned_player(hass, None))
+
+    def test_prefers_available_twin(self):
+        hass = _hass(entities=_states(
+            ("media_player.yu_jian_mitv4_ansm0", "unavailable"),
+            ("media_player.yu_jian_mitv4_ansm0_2", "idle"),
+        ))
+        with patch.object(media, "registry_entries", return_value=[
+            _entry("media_player.yu_jian_mitv4_ansm0"),
+            _entry("media_player.yu_jian_mitv4_ansm0_2"),
+        ]):
+            self.assertEqual(
+                media.find_owned_player(hass, "MiTV4-ANSM0"),
+                "media_player.yu_jian_mitv4_ansm0_2",
+            )
 
 
 class BrowsePlayTests(unittest.IsolatedAsyncioTestCase):

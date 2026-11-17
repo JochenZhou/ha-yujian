@@ -17,7 +17,15 @@ from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_TOKEN
 from homeassistant.core import callback
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
-from .const import DEFAULT_PORT, DISPLAY_NAME, DOMAIN, TXT_TOKEN, ZEROCONF_TYPES
+from .const import (
+    CONF_MODEL,
+    DEFAULT_PORT,
+    DISPLAY_NAME,
+    DOMAIN,
+    TXT_MODEL,
+    TXT_TOKEN,
+    ZEROCONF_TYPES,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -148,6 +156,11 @@ class YujianConfigFlow(ConfigFlow, domain=DOMAIN):
             CONF_TOKEN: token,
             CONF_NAME: name,
         }
+        # The TV's own model string lets the play webhook pick the Music
+        # Assistant player that belongs to this TV instead of guessing.
+        model = _prop(discovery_info.properties, TXT_MODEL)
+        if model:
+            data[CONF_MODEL] = model
 
         # One entry per TV. The token changes when the user resets it on the
         # TV, so the host is the stable identity here.
