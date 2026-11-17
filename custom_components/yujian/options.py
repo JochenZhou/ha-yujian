@@ -73,9 +73,12 @@ class YujianOptionsFlow(OptionsFlow):
                 selector.EntitySelectorConfig(domain="media_player")
             ),
             # Push the playlist catalog to the TV (and accept its play requests).
+            # NOTE: must be a selector, not vol.Boolean() -- HA 2026.11's
+            # probatio serializer cannot serialize the voluptuous Boolean
+            # marker and the options form dies with HTTP 500.
             vol.Optional(
                 CONF_SYNC_PLAYLISTS,
                 default=options.get(CONF_SYNC_PLAYLISTS, True),
-            ): vol.Boolean(),
+            ): selector.BooleanSelector(),
         }
         return self.async_show_form(step_id="init", data_schema=vol.Schema(schema))
