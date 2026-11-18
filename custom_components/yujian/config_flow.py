@@ -165,7 +165,7 @@ class YujianConfigFlow(ConfigFlow, domain=DOMAIN):
         # One entry per TV. The token changes when the user resets it on the
         # TV, so the host is the stable identity here.
         await self.async_set_unique_id(host)
-        self._abort_if_unique_id_configured(updates=data, reload_on_update=False)
+        self._abort_if_unique_id_configured(updates=data, reload_on_update=True)
 
         self._discovered = data
         self.context["title_placeholders"] = {"name": host}

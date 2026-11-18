@@ -14,6 +14,7 @@ integration, which is already configured for this TV).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
 from datetime import timedelta
@@ -38,9 +39,11 @@ from .const import (
     DOMAIN,
     LEGACY_NAMES,
     MAX_PLAYLISTS,
+    PLAYER_STYLES,
     PLAYLIST_SYNC_INTERVAL_SEC,
     PLAY_WEBHOOK_PATH,
     THEMES,
+    WLED_EFFECTS,
 )
 from .coordinator import YujianCoordinator
 from .media import (
@@ -59,6 +62,8 @@ PLATFORMS: list[Platform] = [
     Platform.NOTIFY,
     Platform.SWITCH,
     Platform.SELECT,
+    Platform.NUMBER,
+    Platform.TEXT,
     Platform.BUTTON,
     Platform.BINARY_SENSOR,
     Platform.SENSOR,
@@ -143,9 +148,22 @@ SET_CONFIG_SCHEMA = vol.Schema(
         vol.Optional("muted"): cv.boolean,
         vol.Optional("position"): vol.In(BANNER_POSITIONS),
         vol.Optional("theme"): vol.In(THEMES),
+        vol.Optional("player_style"): vol.In(PLAYER_STYLES),
+        vol.Optional("wled_sync_enabled"): cv.boolean,
+        vol.Optional("wled_sync_port"): vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
+        vol.Optional("wled_color_sync_enabled"): cv.boolean,
+        vol.Optional("wled_color_host"): cv.string,
+        vol.Optional("wled_effect"): vol.In(WLED_EFFECTS),
         **cv.ENTITY_SERVICE_FIELDS,
     }
 )
+
+
+def _cancel_playlist_timer(runtime: dict[str, Any]) -> None:
+    """Cancel any periodic playlist push subscription held on this entry."""
+    unsub = runtime.pop("playlist_unsub", None)
+    if callable(unsub):
+        unsub()
 
 # Process-wide flag marking that the play webhook has been registered.
 _PLAY_VIEW_FLAG = f"{DOMAIN}__play_view"
@@ -173,14 +191,18 @@ def _async_schedule_playlist_sync(
     """Push the playlist catalog now and every PLAYLIST_SYNC_INTERVAL_SEC."""
     from homeassistant.helpers.event import async_track_time_interval
 
+    runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    if runtime is not None:
+        _cancel_playlist_timer(runtime)
+
     async def _push(_now=None):
         await _async_push_playlists(hass, entry, callback)
 
-    entry.async_on_unload(
-        async_track_time_interval(
-            hass, _push, timedelta(seconds=PLAYLIST_SYNC_INTERVAL_SEC)
-        )
+    unsub = async_track_time_interval(
+        hass, _push, timedelta(seconds=PLAYLIST_SYNC_INTERVAL_SEC)
     )
+    if runtime is not None:
+        runtime["playlist_unsub"] = unsub
     # First push is best-effort: the TV may still be waking up.
     hass.async_create_task(_push())
 
@@ -190,53 +212,66 @@ async def _async_push_playlists(
 ) -> None:
     """Browse MA playlists and push the catalog to the TV.
 
-    The catalog is pushed on every call: the TV keeps it in memory only, so it
-    loses it on every app restart and cannot be trusted to still hold one.
+    Serialized per device entry so interval ticks, option updates, and restart
+    hooks never race, and skips empty MA responses instead of wiping the TV.
     """
     runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id)
     if not runtime:
         return
-    preferred = runtime.get("target_entity_id")
-    browse_entity = find_browse_player(hass, preferred)
-    if not browse_entity:
-        # Any offline Music Assistant player fails a browse, so this is the
-        # real "cannot sync" condition worth surfacing once.
-        if not runtime.get("playlist_warned"):
-            runtime["playlist_warned"] = True
-            _LOGGER.warning(
-                "未发现可用的 Music Assistant 播放器，歌单无法同步到电视；"
-                "请确认 Music Assistant 集成已加载且至少有一个播放器在线"
-            )
-        return
-    try:
-        playlists = await async_list_playlists(hass, browse_entity)
-    except Exception as err:  # noqa: BLE001 - browse errors must not break setup
-        _LOGGER.debug("浏览 MA 歌单失败: %s", err)
-        return
-    if len(playlists) > MAX_PLAYLISTS:
-        playlists = playlists[:MAX_PLAYLISTS]
-    runtime["playlist_warned"] = False
+    sync_lock = runtime.setdefault("playlist_sync_lock", asyncio.Lock())
+    async with sync_lock:
+        if not entry.options.get(CONF_SYNC_PLAYLISTS, True):
+            return
+        preferred = runtime.get("target_entity_id")
+        browse_entity = find_browse_player(hass, preferred)
+        if not browse_entity:
+            # Any offline Music Assistant player fails a browse, so this is the
+            # real "cannot sync" condition worth surfacing once.
+            if not runtime.get("playlist_warned"):
+                runtime["playlist_warned"] = True
+                _LOGGER.warning(
+                    "未发现可用的 Music Assistant 播放器，歌单无法同步到电视；"
+                    "请确认 Music Assistant 集成已加载且至少有一个播放器在线"
+                )
+            return
+        try:
+            playlists = await async_list_playlists(hass, browse_entity)
+        except Exception as err:  # noqa: BLE001 - browse errors must not break setup
+            _LOGGER.debug("浏览 MA 歌单失败 (%s): %s", browse_entity, err)
+            playlists = []
+        if not playlists:
+            fallback_entity = find_browse_player(hass, None)
+            if fallback_entity and fallback_entity != browse_entity:
+                try:
+                    playlists = await async_list_playlists(hass, fallback_entity)
+                    if playlists:
+                        browse_entity = fallback_entity
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.debug("备用播放器浏览 MA 歌单失败 (%s): %s", fallback_entity, err)
+        if not playlists:
+            _LOGGER.debug("MA 未返回有效歌单，保留电视端现有歌单目录")
+            return
+        if len(playlists) > MAX_PLAYLISTS:
+            playlists = playlists[:MAX_PLAYLISTS]
+        runtime["playlist_warned"] = False
 
-    # Push on every tick: the TV keeps the catalog in memory only, so we cannot
-    # know it still has one. Covers are cached, so the repeat cost is one small
-    # LAN request, and a restarted app is fed again within the poll interval.
-    cache = runtime.setdefault("playlist_covers", {})
-    items = await fetch_covers(
-        hass, playlists, cache, browse_entity_id=browse_entity
-    )
-    play_target = (
-        runtime.get("target_entity_id")
-        or find_owned_player(hass, entry.data.get(CONF_MODEL))
-        or browse_entity
-    )
-    payload = fit_payload(items, callback, play_target)
-    try:
-        await runtime["client"].async_send_library(payload)
-    except YujianError as err:
-        _LOGGER.warning("推送歌单到电视失败: %s", err)
-        return
-    runtime["playlist_count"] = len(items)
-    _LOGGER.debug("已推送 %s 个歌单到电视", len(items))
+        cache = runtime.setdefault("playlist_covers", {})
+        items = await fetch_covers(
+            hass, playlists, cache, browse_entity_id=browse_entity
+        )
+        play_target = (
+            runtime.get("target_entity_id")
+            or find_owned_player(hass, entry.data.get(CONF_MODEL))
+            or browse_entity
+        )
+        payload = fit_payload(items, callback, play_target)
+        try:
+            await runtime["client"].async_send_library(payload)
+        except YujianError as err:
+            _LOGGER.warning("推送歌单到电视失败: %s", err)
+            return
+        runtime["playlist_count"] = len(items)
+        _LOGGER.debug("已推送 %s 个歌单到电视", len(items))
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -339,14 +374,25 @@ async def _async_entry_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
     # (target entity, sync toggle) take effect without a restart.
     runtime["target_entity_id"] = entry.options.get(CONF_TARGET_ENTITY)
     runtime["playlist_covers"] = {}
+    _cancel_playlist_timer(runtime)
+    coordinator = runtime["coordinator"]
     if entry.options.get(CONF_SYNC_PLAYLISTS, True):
-        await _async_push_playlists(
-            hass, entry, _play_callback(hass, runtime["callback_token"])
-        )
+        callback = _play_callback(hass, runtime["callback_token"])
+        _async_schedule_playlist_sync(hass, entry, callback)
+
+        def _on_tv_restart(_entry_id: str = entry.entry_id) -> None:
+            hass.async_create_task(_async_push_playlists(hass, entry, callback))
+
+        coordinator.on_device_restart = _on_tv_restart
+    else:
+        coordinator.on_device_restart = None
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    if runtime is not None:
+        _cancel_playlist_timer(runtime)
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
@@ -509,28 +555,52 @@ def _async_register_service(hass: HomeAssistant) -> None:
             raise HomeAssistantError("Dismiss failed for: " + ", ".join(failures))
 
     async def _async_handle_set_config(call: ServiceCall) -> None:
-        """Push mute / position / theme to the targeted TVs (all by default)."""
+        """Push mute / position / theme / player style / WLED settings to targeted TVs."""
+        sendspin_keys = (
+            "player_style",
+            "wled_sync_enabled",
+            "wled_sync_port",
+            "wled_color_sync_enabled",
+            "wled_color_host",
+            "wled_effect",
+        )
         failures = []
         for entry_data in await _targets(call):
             client = entry_data.get("client")
             coordinator = entry_data.get("coordinator")
             if client is None:
                 continue
+            merged_updates: dict[str, Any] = {}
             try:
-                result = await client.async_set_config(
-                    muted=call.data.get("muted"),
-                    position=call.data.get("position"),
-                    theme=call.data.get("theme"),
-                )
+                if any(call.data.get(k) is not None for k in ("muted", "position", "theme")):
+                    result = await client.async_set_config(
+                        muted=call.data.get("muted"),
+                        position=call.data.get("position"),
+                        theme=call.data.get("theme"),
+                    )
+                    if isinstance(result, dict):
+                        merged_updates.update(
+                            {k: v for k, v in result.items() if k != "ok"}
+                        )
+                sendspin_changes = {
+                    k: (
+                        call.data[k].strip()
+                        if k == "wled_color_host" and isinstance(call.data[k], str)
+                        else call.data[k]
+                    )
+                    for k in sendspin_keys
+                    if call.data.get(k) is not None
+                }
+                if sendspin_changes:
+                    await client.async_set_sendspin_config(**sendspin_changes)
+                    merged_updates.update(sendspin_changes)
             except YujianError as err:
                 _LOGGER.warning("设置 %s 的电视配置失败: %s", client.host, err)
                 failures.append(client.host)
                 continue
-            # The endpoint echoes the TV's real state -- merge it in so the
-            # entity reflects the change immediately (no poll cooldown wait).
-            if coordinator is not None and isinstance(result, dict) and result:
+            if coordinator is not None and merged_updates:
                 merged = dict(coordinator.data or {})
-                merged.update({k: v for k, v in result.items() if k != "ok"})
+                merged.update(merged_updates)
                 coordinator.async_set_updated_data(merged)
         if failures:
             raise HomeAssistantError("Configuration failed for: " + ", ".join(failures))

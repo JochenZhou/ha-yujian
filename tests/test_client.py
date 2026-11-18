@@ -160,6 +160,43 @@ class ClientContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((method, path), ("POST", "/test-token/library"))
         self.assertEqual(data, {"version": 1, "playlists": []})
 
+    async def test_sendspin_status_and_config_round_trip(self):
+        self.body = {
+            "player_style": "cover_blur",
+            "wled_sync_enabled": True,
+            "wled_sync_port": 11988,
+            "wled_color_sync_enabled": True,
+            "wled_color_host": "192.168.101.206",
+            "wled_effect": "gravcentric",
+        }
+        status = await self.client.async_sendspin_status()
+        self.assertEqual(self.requests[-1][:2], ("GET", "/test-token/sendspin"))
+        self.assertEqual(status["player_style"], "cover_blur")
+
+        self.body = {"ok": True}
+        await self.client.async_set_sendspin_config(
+            player_style="vinyl",
+            wled_sync_enabled=False,
+            wled_sync_port=12000,
+            wled_color_sync_enabled=True,
+            wled_color_host="192.168.101.210",
+            wled_effect="midnoise",
+        )
+        method, path, payload = self.requests[-1]
+        self.assertEqual((method, path), ("POST", "/test-token/sendspin"))
+        self.assertEqual(
+            payload,
+            {
+                "action": "config",
+                "player_style": "vinyl",
+                "wled_sync_enabled": False,
+                "wled_sync_port": 12000,
+                "wled_color_sync_enabled": True,
+                "wled_color_host": "192.168.101.210",
+                "wled_effect": "midnoise",
+            },
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

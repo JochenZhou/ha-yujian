@@ -69,6 +69,12 @@
     "switch": {
       "muted": {
         "name": "通知静音"
+      },
+      "wled_sync_enabled": {
+        "name": "WLED 音乐律动"
+      },
+      "wled_color_sync_enabled": {
+        "name": "WLED 封面色彩同步"
       }
     },
     "select": {
@@ -96,6 +102,36 @@
           "bottom-left": "左下角小窗",
           "bottom-right": "右下角小窗"
         }
+      },
+      "player_style": {
+        "name": "播放页样式",
+        "state": {
+          "vinyl": "样式一：经典黑胶",
+          "cover_blur": "样式二：方形封面·高斯模糊"
+        }
+      },
+      "wled_effect": {
+        "name": "推荐 WLED 律动效果",
+        "state": {
+          "custom": "保持灯带当前效果",
+          "gravcentric": "中轴舒展 (Gravcentric · 推荐)",
+          "geq": "频谱均衡 (GEQ)",
+          "midnoise": "柔光噪波 (Midnoise)",
+          "waterfall": "星河流瀑 (Waterfall)",
+          "pixels": "星点微光 (Pixels)",
+          "gravimeter": "呼吸音柱 (Gravimeter)",
+          "solid": "纯色静谧 (Solid)"
+        }
+      }
+    },
+    "number": {
+      "wled_sync_port": {
+        "name": "WLED 组播 UDP 端口"
+      }
+    },
+    "text": {
+      "wled_color_host": {
+        "name": "WLED 设备地址"
       }
     },
     "button": {
@@ -120,6 +156,9 @@
       },
       "uptime": {
         "name": "服务运行时间"
+      },
+      "playlist_count": {
+        "name": "已同步歌单数"
       }
     }
   },
@@ -209,6 +248,30 @@
         "position": {
           "name": "默认显示位置",
           "description": "电视端新横幅的默认方位，影响不指定 position 的推送。"
+        },
+        "player_style": {
+          "name": "播放页样式",
+          "description": "切换电视端音乐播放页视觉样式。"
+        },
+        "wled_sync_enabled": {
+          "name": "WLED 音乐律动",
+          "description": "开启或关闭 AudioReactive V2 组播音频律动。"
+        },
+        "wled_sync_port": {
+          "name": "WLED 组播 UDP 端口",
+          "description": "AudioReactive V2 组播端口（1–65535，默认 11988）。"
+        },
+        "wled_color_sync_enabled": {
+          "name": "WLED 封面色彩同步",
+          "description": "开启或关闭按专辑封面主色调同步 WLED 灯带。"
+        },
+        "wled_color_host": {
+          "name": "WLED 设备地址",
+          "description": "目标 WLED 设备 IP 或主机名。"
+        },
+        "wled_effect": {
+          "name": "推荐 WLED 律动效果",
+          "description": "切换并立即向 WLED 灯带应用柔和的推荐律动效果；选择 custom 则保持灯带当前效果。"
         }
       }
     }
@@ -249,6 +312,24 @@
         "off": "关闭",
         "ha": "HA 合成",
         "tv": "电视朗读"
+      }
+    },
+    "player_style": {
+      "options": {
+        "vinyl": "样式一：经典黑胶",
+        "cover_blur": "样式二：方形封面·高斯模糊"
+      }
+    },
+    "wled_effect": {
+      "options": {
+        "custom": "保持灯带当前效果",
+        "gravcentric": "中轴舒展 (Gravcentric · 推荐)",
+        "geq": "频谱均衡 (GEQ)",
+        "midnoise": "柔光噪波 (Midnoise)",
+        "waterfall": "星河流瀑 (Waterfall)",
+        "pixels": "星点微光 (Pixels)",
+        "gravimeter": "呼吸音柱 (Gravimeter)",
+        "solid": "纯色静谧 (Solid)"
       }
     }
   }

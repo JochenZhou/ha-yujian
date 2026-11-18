@@ -59,3 +59,16 @@ class YujianEntity(CoordinatorEntity):
                 **{k: v for k, v in result.items() if k != "ok"},
             }
         )
+
+    async def async_set_sendspin_config(self, **changes):
+        """Update Sendspin player style or WLED settings and reflect locally."""
+        try:
+            await self.coordinator.client.async_set_sendspin_config(**changes)
+        except YujianError as err:
+            raise HomeAssistantError(str(err)) from err
+        self.coordinator.async_set_updated_data(
+            {
+                **(self.coordinator.data or {}),
+                **changes,
+            }
+        )

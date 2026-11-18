@@ -27,6 +27,7 @@ from .const import (
     MIN_MAX_DURATION,
     NOTIFY_PATH_TEMPLATE,
     REVIVE_DELAY_SEC,
+    SENDSPIN_PATH_TEMPLATE,
     TV_SERVICE,
 )
 
@@ -204,6 +205,41 @@ class YujianClient:
     async def async_send_library(self, payload: dict[str, Any]) -> None:
         """Push the playlist catalog to the TV's /library endpoint."""
         url = f"{self.base_url}{LIBRARY_PATH_TEMPLATE.format(token=self._token)}"
+        await self._async_post(url, payload, timeout_sec=30)
+
+    async def async_sendspin_status(self) -> dict[str, Any]:
+        """Return Sendspin playback, player style, and WLED sync settings."""
+        url = f"{self.base_url}{SENDSPIN_PATH_TEMPLATE.format(token=self._token)}"
+        data = await self._async_get(url)
+        if not isinstance(data, dict):
+            raise YujianError("Invalid Sendspin status response")
+        return data
+
+    async def async_set_sendspin_config(
+        self,
+        *,
+        player_style: str | None = None,
+        wled_sync_enabled: bool | None = None,
+        wled_sync_port: int | None = None,
+        wled_color_sync_enabled: bool | None = None,
+        wled_color_host: str | None = None,
+        wled_effect: str | None = None,
+    ) -> None:
+        """Update Sendspin player style and WLED sync settings on the TV."""
+        payload: dict[str, Any] = {"action": "config"}
+        if player_style is not None:
+            payload["player_style"] = player_style
+        if wled_sync_enabled is not None:
+            payload["wled_sync_enabled"] = wled_sync_enabled
+        if wled_sync_port is not None:
+            payload["wled_sync_port"] = int(wled_sync_port)
+        if wled_color_sync_enabled is not None:
+            payload["wled_color_sync_enabled"] = wled_color_sync_enabled
+        if wled_color_host is not None:
+            payload["wled_color_host"] = wled_color_host
+        if wled_effect is not None:
+            payload["wled_effect"] = wled_effect
+        url = f"{self.base_url}{SENDSPIN_PATH_TEMPLATE.format(token=self._token)}"
         await self._async_post(url, payload)
 
     async def async_set_config(
@@ -229,14 +265,16 @@ class YujianClient:
         url = f"{self.base_url}{DISMISS_PATH_TEMPLATE.format(token=self._token)}"
         await self._async_post(url, {})
 
-    async def _async_post(self, url: str, payload: dict[str, Any]) -> Any:
+    async def _async_post(
+        self, url: str, payload: dict[str, Any], *, timeout_sec: int = 10
+    ) -> Any:
         """POST JSON, raise on any non-2xx answer, return the decoded body."""
         session = async_get_clientsession(self._hass)
         try:
             async with session.post(
                 url,
                 json=payload,
-                timeout=aiohttp.ClientTimeout(total=10),
+                timeout=aiohttp.ClientTimeout(total=timeout_sec),
                 headers={"Content-Type": "application/json; charset=utf-8"},
             ) as resp:
                 body = await resp.text()

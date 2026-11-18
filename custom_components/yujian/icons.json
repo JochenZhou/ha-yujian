@@ -23,6 +23,12 @@
           "on": "mdi:volume-off",
           "off": "mdi:volume-high"
         }
+      },
+      "wled_sync_enabled": {
+        "default": "mdi:waveform"
+      },
+      "wled_color_sync_enabled": {
+        "default": "mdi:palette-swatch-outline"
       }
     },
     "select": {
@@ -31,6 +37,22 @@
       },
       "position": {
         "default": "mdi:aspect-ratio"
+      },
+      "player_style": {
+        "default": "mdi:disc-player"
+      },
+      "wled_effect": {
+        "default": "mdi:auto-fix"
+      }
+    },
+    "number": {
+      "wled_sync_port": {
+        "default": "mdi:network-outline"
+      }
+    },
+    "text": {
+      "wled_color_host": {
+        "default": "mdi:ip-network-outline"
       }
     },
     "button": {
@@ -59,6 +81,9 @@
       },
       "uptime": {
         "default": "mdi:timer-outline"
+      },
+      "playlist_count": {
+        "default": "mdi:playlist-music"
       }
     }
   }

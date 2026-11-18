@@ -69,6 +69,12 @@
     "switch": {
       "muted": {
         "name": "Notification mute"
+      },
+      "wled_sync_enabled": {
+        "name": "WLED audio reactive sync"
+      },
+      "wled_color_sync_enabled": {
+        "name": "WLED cover color sync"
       }
     },
     "select": {
@@ -96,6 +102,36 @@
           "bottom-left": "Bottom left window",
           "bottom-right": "Bottom right window"
         }
+      },
+      "player_style": {
+        "name": "Player style",
+        "state": {
+          "vinyl": "Vinyl record",
+          "cover_blur": "Square cover · Blur"
+        }
+      },
+      "wled_effect": {
+        "name": "Recommended WLED effect",
+        "state": {
+          "custom": "Keep current lamp effect",
+          "gravcentric": "Gravcentric (balanced center wave)",
+          "geq": "GEQ (16-band spectrum)",
+          "midnoise": "Midnoise (gentle vocal flow)",
+          "waterfall": "Waterfall (flowing trail)",
+          "pixels": "Pixels (soft sparkles)",
+          "gravimeter": "Gravimeter (smooth level meter)",
+          "solid": "Solid (calm ambient cover color)"
+        }
+      }
+    },
+    "number": {
+      "wled_sync_port": {
+        "name": "WLED UDP port"
+      }
+    },
+    "text": {
+      "wled_color_host": {
+        "name": "WLED device address"
       }
     },
     "button": {
@@ -120,6 +156,9 @@
       },
       "uptime": {
         "name": "Service uptime"
+      },
+      "playlist_count": {
+        "name": "Synced playlists"
       }
     }
   },
@@ -209,6 +248,30 @@
         "position": {
           "name": "Default position",
           "description": "Default position for notifications that omit position."
+        },
+        "player_style": {
+          "name": "Player style",
+          "description": "Music player visual style on the TV."
+        },
+        "wled_sync_enabled": {
+          "name": "WLED audio reactive sync",
+          "description": "Enable AudioReactive V2 UDP multicast packets."
+        },
+        "wled_sync_port": {
+          "name": "WLED UDP port",
+          "description": "UDP port from 1 to 65535 (default 11988)."
+        },
+        "wled_color_sync_enabled": {
+          "name": "WLED cover color sync",
+          "description": "Sync segment 0 primary color with album artwork."
+        },
+        "wled_color_host": {
+          "name": "WLED device address",
+          "description": "Target WLED IP address or hostname."
+        },
+        "wled_effect": {
+          "name": "Recommended WLED effect",
+          "description": "Apply a tuned WLED preset, or select custom to keep the lamp's current effect."
         }
       }
     }
@@ -249,6 +312,24 @@
         "off": "Off",
         "ha": "Home Assistant TTS",
         "tv": "TV speech engine"
+      }
+    },
+    "player_style": {
+      "options": {
+        "vinyl": "Vinyl record",
+        "cover_blur": "Square cover · Blur"
+      }
+    },
+    "wled_effect": {
+      "options": {
+        "custom": "Keep current lamp effect",
+        "gravcentric": "Gravcentric (balanced center wave)",
+        "geq": "GEQ (16-band spectrum)",
+        "midnoise": "Midnoise (gentle vocal flow)",
+        "waterfall": "Waterfall (flowing trail)",
+        "pixels": "Pixels (soft sparkles)",
+        "gravimeter": "Gravimeter (smooth level meter)",
+        "solid": "Solid (calm ambient cover color)"
       }
     }
   }

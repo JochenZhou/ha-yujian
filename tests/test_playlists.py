@@ -62,6 +62,25 @@ class PlaylistPayloadTests(unittest.TestCase):
         self.assertEqual(payload["callback"]["token"], "t")
         self.assertEqual(len(payload["playlists"]), 1)
 
+    def test_fit_payload_trims_huge_track_lists_before_dropping_all_tracks(self):
+        big_tracks = [
+            playlists.track_item(f"Song {i}", f"library://track/{i}")
+            for i in range(400)
+        ]
+        items = [
+            playlists.playlist_item("Huge", "library://playlist/1", tracks=big_tracks)
+        ]
+        full_size = playlists.payload_bytes(
+            playlists.build_playlists_payload(items, {"url": "u", "token": "t"}, "")
+        )
+        trimmed_expected = playlists.MAX_TRACKS_PER_PLAYLIST
+        fitted = playlists.fit_payload(
+            items, {"url": "u", "token": "t"}, "", limit=full_size - 500
+        )
+        entry = fitted["playlists"][0]
+        self.assertEqual(len(entry["tracks"]), trimmed_expected)
+        self.assertEqual(entry["track_count"], 400)
+
     def test_fingerprint_is_order_insensitive(self):
         a = [
             {"id": "library://playlist/1", "name": "x"},

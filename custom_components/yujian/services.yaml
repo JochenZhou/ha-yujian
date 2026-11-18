@@ -192,3 +192,50 @@ set_config:
           - top-right
           - bottom-left
           - bottom-right
+    player_style:
+      name: 播放页样式
+      description: 切换电视端音乐播放页风格（黑胶唱片或方形封面高斯模糊）。
+      selector:
+        select:
+          translation_key: player_style
+          options:
+          - vinyl
+          - cover_blur
+    wled_sync_enabled:
+      name: WLED 音乐律动
+      description: 开启或关闭局域网 AudioReactive V2 组播音频律动。
+      selector:
+        boolean: null
+    wled_sync_port:
+      name: WLED 组播 UDP 端口
+      description: AudioReactive V2 组播 UDP 端口（1–65535，默认 11988）。
+      selector:
+        number:
+          min: 1
+          max: 65535
+          step: 1
+    wled_color_sync_enabled:
+      name: WLED 封面色彩同步
+      description: 开启或关闭按专辑封面主色调同步 WLED 灯带色彩。
+      selector:
+        boolean: null
+    wled_color_host:
+      name: WLED 设备地址
+      description: 目标 WLED 设备 IP 或主机名（如 192.168.101.206）。
+      selector:
+        text: null
+    wled_effect:
+      name: 推荐 WLED 律动效果
+      description: 一键为 WLED 灯带切换适合音乐律动的柔和预设效果；选择 custom 则保持灯带当前效果。
+      selector:
+        select:
+          translation_key: wled_effect
+          options:
+          - custom
+          - gravcentric
+          - geq
+          - midnoise
+          - waterfall
+          - pixels
+          - gravimeter
+          - solid

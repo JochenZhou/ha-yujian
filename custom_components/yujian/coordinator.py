@@ -31,6 +31,7 @@ class YujianCoordinator(DataUpdateCoordinator):
         # in-memory playlist catalog) restarted between two polls.
         self.on_device_restart: Callable[[], None] | None = None
         self._last_uptime: float | None = None
+        self._last_playlist_count: int | None = None
 
     async def _async_update_data(self):
         try:
@@ -41,6 +42,7 @@ class YujianCoordinator(DataUpdateCoordinator):
             raise UpdateFailed("Invalid device health response")
         self._async_note_uptime(data)
         self._async_note_model(data)
+        self._async_note_playlist_loss(data)
         try:
             history = await self.client.async_history()
         except YujianError:
@@ -51,6 +53,25 @@ class YujianCoordinator(DataUpdateCoordinator):
             data["history_available"] = True
             data["last_notification"] = history[0] if history else None
             data["history_count"] = len(history)
+        try:
+            sendspin = await self.client.async_sendspin_status()
+        except YujianError:
+            sendspin = None
+        if isinstance(sendspin, dict) and "player_style" in sendspin:
+            data["sendspin_config_available"] = True
+            for key in (
+                "player_style",
+                "wled_sync_enabled",
+                "wled_sync_port",
+                "wled_color_sync_enabled",
+                "wled_color_host",
+                "wled_effect",
+                "playlist_count",
+            ):
+                if key in sendspin:
+                    data[key] = sendspin[key]
+        else:
+            data["sendspin_config_available"] = False
         registry = dr.async_get(self.hass)
         device = registry.async_get_device_by_identifier(
             (
@@ -102,3 +123,16 @@ class YujianCoordinator(DataUpdateCoordinator):
         self.hass.config_entries.async_update_entry(
             self.entry, data={**self.entry.data, CONF_MODEL: model}
         )
+
+    def _async_note_playlist_loss(self, data) -> None:
+        """Re-trigger playlist sync when /health reports 0 playlists after holding some."""
+        count = data.get("playlist_count")
+        if not isinstance(count, int) or isinstance(count, bool):
+            return
+        previous = self._last_playlist_count
+        self._last_playlist_count = count
+        if previous is None or previous <= 0 or count > 0:
+            return
+        _LOGGER.debug("电视端歌单数降至 0（此前 %s），准备重推歌单", previous)
+        if self.on_device_restart is not None:
+            self.on_device_restart()

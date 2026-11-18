@@ -36,6 +36,9 @@ CONFIG_PATH_TEMPLATE = "/{token}/config"
 # Path of the token-protected playlist-catalog endpoint: POST /{token}/library
 LIBRARY_PATH_TEMPLATE = "/{token}/library"
 
+# Path of the Sendspin player & WLED configuration endpoint: GET/POST /{token}/sendspin
+SENDSPIN_PATH_TEMPLATE = "/{token}/sendspin"
+
 # Android package / component of the app on the TV, used to revive it via
 # ADB. These belong to the installed app and must not be renamed here.
 TV_PACKAGE = "com.zqc.tvnotify"
@@ -119,3 +122,21 @@ PLAYLIST_SYNC_INTERVAL_SEC = 300
 
 # Upper bound on the number of playlists pushed (keeps the payload light).
 MAX_PLAYLISTS = 200
+
+# Sendspin player visual styles (App v1.10.3+).
+PLAYER_STYLES = ("vinyl", "cover_blur")
+
+# Curated WLED effect keys accepted by App v1.10.3+ (and default fallback).
+WLED_EFFECTS = (
+    "custom",
+    "gravcentric",
+    "geq",
+    "midnoise",
+    "waterfall",
+    "pixels",
+    "gravimeter",
+    "solid",
+)
+
+DEFAULT_WLED_SYNC_PORT = 11988
+DEFAULT_WLED_COLOR_HOST = "192.168.101.206"

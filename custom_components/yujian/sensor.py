@@ -14,7 +14,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities(
         [
             YujianSensor(entry, coordinator, key)
-            for key in ("last_notification", "history_count", "uptime")
+            for key in ("last_notification", "history_count", "uptime", "playlist_count")
         ]
     )
 
@@ -28,13 +28,20 @@ class YujianSensor(YujianEntity, SensorEntity):
             self._attr_device_class = SensorDeviceClass.DURATION
             self._attr_native_unit_of_measurement = UnitOfTime.SECONDS
             self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        elif key == "playlist_count":
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC
+            self._attr_icon = "mdi:playlist-music"
 
     @property
     def available(self):
-        return super().available and (
-            self._key == "uptime"
-            or (self.coordinator.data or {}).get("history_available", False)
-        )
+        if not super().available:
+            return False
+        data = self.coordinator.data or {}
+        if self._key == "uptime":
+            return True
+        if self._key == "playlist_count":
+            return data.get("playlist_count") is not None
+        return data.get("history_available", False)
 
     @property
     def native_value(self):
