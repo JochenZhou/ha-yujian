@@ -32,6 +32,20 @@ class ResolveRuntimeTests(unittest.TestCase):
     def test_empty_data(self):
         self.assertIsNone(webhook.resolve_runtime("abc", {}))
 
+    def test_validate_track_id(self):
+        self.assertEqual(webhook.validate_track_id(None), (True, None))
+        self.assertEqual(webhook.validate_track_id("  "), (True, None))
+        self.assertEqual(
+            webhook.validate_track_id(" library://track/12 "),
+            (True, "library://track/12"),
+        )
+        self.assertEqual(
+            webhook.validate_track_id("spotify://track/abc"),
+            (True, "spotify://track/abc"),
+        )
+        self.assertEqual(webhook.validate_track_id(123), (False, None))
+        self.assertEqual(webhook.validate_track_id("not-a-uri"), (False, None))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -251,6 +251,75 @@ class BrowsePlayTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertTrue(kwargs["blocking"])
 
+    async def test_list_playlist_tracks_parses_artist_and_skips_unplayable(self):
+        listing = {
+            "children": [
+                {
+                    "media_content_id": "library://track/101",
+                    "title": "周杰伦 - 晴天",
+                    "can_play": True,
+                },
+                {
+                    "media_content_id": "library://track/102",
+                    "title": "纯音乐",
+                },
+                {
+                    "media_content_id": "library://folder/x",
+                    "title": "子目录",
+                    "can_play": False,
+                },
+            ]
+        }
+        hass = _hass(service_response={"media_player.a": listing})
+        tracks = await media.async_list_playlist_tracks(
+            hass, "media_player.a", "library://playlist/1"
+        )
+        self.assertEqual(
+            tracks,
+            [
+                {"id": "library://track/101", "name": "晴天", "artist": "周杰伦"},
+                {"id": "library://track/102", "name": "纯音乐"},
+            ],
+        )
+
+    async def test_play_track_prefers_music_assistant_start_item_when_available(self):
+        hass = _hass()
+        hass.services.has_service = MagicMock(return_value=True)
+        await media.async_play_track(
+            hass,
+            "media_player.a",
+            "library://playlist/1",
+            "library://track/101",
+        )
+        args, _ = hass.services.async_call.call_args
+        self.assertEqual(args[0], "music_assistant")
+        self.assertEqual(args[1], "play_media")
+        self.assertEqual(
+            args[2],
+            {
+                "entity_id": "media_player.a",
+                "media_id": "library://playlist/1",
+                "media_type": "playlist",
+                "enqueue": "replace",
+                "start_item": "library://track/101",
+            },
+        )
+
+    async def test_play_track_falls_back_to_media_player_when_ma_service_absent(self):
+        hass = _hass()
+        hass.services.has_service = MagicMock(return_value=False)
+        await media.async_play_track(
+            hass,
+            "media_player.a",
+            "library://playlist/1",
+            "library://track/101",
+        )
+        args, _ = hass.services.async_call.call_args
+        self.assertEqual(args[0], "media_player")
+        self.assertEqual(args[1], "play_media")
+        self.assertEqual(args[2]["media_content_id"], "library://track/101")
+        self.assertEqual(args[2]["media_content_type"], "music")
+
 
 class CoverTests(unittest.IsolatedAsyncioTestCase):
     async def test_cover_skips_non_http_urls(self):

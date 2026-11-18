@@ -221,7 +221,9 @@ async def _async_push_playlists(
     # know it still has one. Covers are cached, so the repeat cost is one small
     # LAN request, and a restarted app is fed again within the poll interval.
     cache = runtime.setdefault("playlist_covers", {})
-    items = await fetch_covers(hass, playlists, cache)
+    items = await fetch_covers(
+        hass, playlists, cache, browse_entity_id=browse_entity
+    )
     play_target = (
         runtime.get("target_entity_id")
         or find_owned_player(hass, entry.data.get(CONF_MODEL))

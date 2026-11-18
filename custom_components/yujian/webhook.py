@@ -32,8 +32,26 @@ def resolve_runtime(token: str | None, data: dict[str, Any]) -> dict[str, Any] |
     return None
 
 
+def validate_track_id(value: Any) -> tuple[bool, str | None]:
+    """Validate optional ``track_id`` sent by the TV.
+
+    Returns ``(ok, normalized_uri_or_none)``. Missing or blank values mean
+    "play whole playlist from the start".
+    """
+    if value is None:
+        return True, None
+    if not isinstance(value, str):
+        return False, None
+    cleaned = value.strip()
+    if not cleaned:
+        return True, None
+    if "://" not in cleaned or any(ch.isspace() for ch in cleaned):
+        return False, None
+    return True, cleaned
+
+
 class YujianPlayView(HomeAssistantView):
-    """Expose ``POST {PLAY_WEBHOOK_PATH}`` for the TV to start a playlist."""
+    """Expose ``POST {PLAY_WEBHOOK_PATH}`` for the TV to start a playlist or track."""
 
     url = PLAY_WEBHOOK_PATH
     name = "api:yujian:play"
@@ -43,7 +61,7 @@ class YujianPlayView(HomeAssistantView):
         self._hass = hass
 
     async def post(self, request):
-        """Handle a play request: validate token, then play the playlist."""
+        """Handle a play request: validate token, then play the playlist or track."""
         auth = request.headers.get("Authorization", "")
         token = auth[7:].strip() if auth.startswith("Bearer ") else ""
         runtime = resolve_runtime(token, self._hass.data.get(DOMAIN, {}))
@@ -59,7 +77,11 @@ class YujianPlayView(HomeAssistantView):
         if not isinstance(uri, str) or not uri.startswith("library://"):
             return self.json({"ok": False, "error": "invalid id"}, status_code=400)
 
-        from .media import async_play_playlist, find_owned_player
+        track_ok, track_uri = validate_track_id((body or {}).get("track_id"))
+        if not track_ok:
+            return self.json({"ok": False, "error": "invalid track_id"}, status_code=400)
+
+        from .media import async_play_playlist, async_play_track, find_owned_player
 
         # Who asked decides where it plays. Never fall back to "the first Music
         # Assistant player": with several players around (phone, sound box, sync
@@ -83,8 +105,17 @@ class YujianPlayView(HomeAssistantView):
             return self.json({"ok": False, "error": NO_TARGET_ERROR}, status_code=409)
 
         try:
-            await async_play_playlist(self._hass, entity_id, uri)
+            if track_uri:
+                await async_play_track(self._hass, entity_id, uri, track_uri)
+            else:
+                await async_play_playlist(self._hass, entity_id, uri)
         except Exception as err:  # noqa: BLE001 - report failures to the TV
-            _LOGGER.warning("播放歌单 %s 失败（%s）: %s", uri, entity_id, err)
+            _LOGGER.warning(
+                "播放歌单 %s（单曲 %s）失败（%s）: %s",
+                uri,
+                track_uri or "-",
+                entity_id,
+                err,
+            )
             return self.json({"ok": False, "error": str(err)}, status_code=500)
         return self.json({"ok": True, "entity_id": entity_id})

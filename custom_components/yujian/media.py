@@ -15,7 +15,7 @@ from typing import Any
 
 import aiohttp
 
-from .playlists import playlist_item
+from .playlists import playlist_item, track_item
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -225,6 +225,44 @@ async def async_list_playlists(hass, entity_id: str) -> list[dict[str, Any]]:
     return playlists
 
 
+def _split_track_title(
+    raw_title: str, explicit_artist: Any = None
+) -> tuple[str, str | None]:
+    """Extract track name and optional artist from a MA browse_media title."""
+    clean = raw_title.strip()
+    artist = str(explicit_artist).strip() if isinstance(explicit_artist, str) else ""
+    if artist:
+        prefix = f"{artist} - "
+        if clean.startswith(prefix) and len(clean) > len(prefix):
+            return clean[len(prefix) :].strip(), artist
+        return clean, artist
+    if " - " in clean:
+        parsed_artist, parsed_name = clean.split(" - ", 1)
+        parsed_artist = parsed_artist.strip()
+        parsed_name = parsed_name.strip()
+        if parsed_artist and parsed_name:
+            return parsed_name, parsed_artist
+    return clean, None
+
+
+async def async_list_playlist_tracks(
+    hass, entity_id: str, playlist_id: str
+) -> list[dict[str, Any]]:
+    """Return tracks inside one MA playlist as compact ``track_item`` dicts."""
+    listing = await async_browse(hass, entity_id, "playlist", playlist_id)
+    tracks: list[dict[str, Any]] = []
+    for child in listing.get("children") or []:
+        if child.get("can_play") is False:
+            continue
+        track_id = child.get("media_content_id")
+        if not isinstance(track_id, str) or "://" not in track_id:
+            continue
+        raw_title = str(child.get("title") or track_id)
+        name, artist = _split_track_title(raw_title, child.get("artist"))
+        tracks.append(track_item(name or track_id, track_id, artist=artist))
+    return tracks
+
+
 async def async_play_playlist(hass, entity_id: str, uri: str) -> None:
     """Play a whole playlist on the MA player (replacing the queue)."""
     await hass.services.async_call(
@@ -234,6 +272,42 @@ async def async_play_playlist(hass, entity_id: str, uri: str) -> None:
             "entity_id": entity_id,
             "media_content_id": uri,
             "media_content_type": "playlist",
+            "enqueue": "replace",
+        },
+        blocking=True,
+    )
+
+
+async def async_play_track(
+    hass, entity_id: str, playlist_uri: str, track_uri: str
+) -> None:
+    """Play a specific track inside a playlist so subsequent playlist tracks continue.
+
+    Uses ``music_assistant.play_media`` with ``start_item`` when available so
+    the full playlist stays loaded in queue; falls back to single-track
+    ``media_player.play_media`` otherwise.
+    """
+    if hass.services.has_service(MASS_PLATFORM, "play_media") is True:
+        await hass.services.async_call(
+            MASS_PLATFORM,
+            "play_media",
+            {
+                "entity_id": entity_id,
+                "media_id": playlist_uri,
+                "media_type": "playlist",
+                "enqueue": "replace",
+                "start_item": track_uri,
+            },
+            blocking=True,
+        )
+        return
+    await hass.services.async_call(
+        "media_player",
+        "play_media",
+        {
+            "entity_id": entity_id,
+            "media_content_id": track_uri,
+            "media_content_type": "music",
             "enqueue": "replace",
         },
         blocking=True,
@@ -277,11 +351,15 @@ async def fetch_covers(
     hass,
     playlists: list[dict[str, Any]],
     cache: dict[str, str | None] | None = None,
+    browse_entity_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Attach base64 covers to the playlist list with bounded concurrency.
+    """Attach base64 covers (and optional track listings) with bounded concurrency.
 
     ``cache`` maps playlist id to an already downloaded data URI (or None when
     the cover is missing) so a periodic re-push does not refetch every image.
+    When ``browse_entity_id`` is provided, each playlist's tracks are also
+    fetched concurrently so the TV can display track details and play from any
+    song.
     """
     sem = asyncio.Semaphore(5)
 
@@ -294,6 +372,21 @@ async def fetch_covers(
                 cover = await async_fetch_cover_b64(hass, item.get("thumbnail"))
             if cache is not None:
                 cache[media_id] = cover
-        return playlist_item(item["name"], media_id, cover_b64=cover)
+        tracks: list[dict[str, Any]] | None = None
+        if browse_entity_id:
+            try:
+                async with sem:
+                    tracks = await async_list_playlist_tracks(
+                        hass, browse_entity_id, media_id
+                    )
+            except Exception as err:  # noqa: BLE001 - keep catalog resilient per playlist
+                _LOGGER.debug("拉取歌单 %s 曲目失败: %s", media_id, err)
+                tracks = None
+        return playlist_item(
+            item["name"],
+            media_id,
+            cover_b64=cover,
+            tracks=tracks,
+        )
 
     return await asyncio.gather(*(_one(item) for item in playlists))

@@ -36,6 +36,21 @@ class PlaylistPayloadTests(unittest.TestCase):
         item = playlists.playlist_item("x", "library://playlist/1")
         self.assertEqual(item, {"id": "library://playlist/1", "name": "x"})
 
+    def test_item_includes_tracks_and_infers_count(self):
+        tracks = [
+            playlists.track_item("晴天", "library://track/1", artist="周杰伦"),
+            playlists.track_item("七里香", "library://track/2"),
+        ]
+        item = playlists.playlist_item("华语", "library://playlist/9", tracks=tracks)
+        self.assertEqual(item["track_count"], 2)
+        self.assertEqual(
+            item["tracks"],
+            [
+                {"id": "library://track/1", "name": "晴天", "artist": "周杰伦"},
+                {"id": "library://track/2", "name": "七里香"},
+            ],
+        )
+
     def test_payload_shape(self):
         payload = playlists.build_playlists_payload(
             [{"id": "library://playlist/1", "name": "x"}],
@@ -61,7 +76,15 @@ class PlaylistPayloadTests(unittest.TestCase):
     def test_fingerprint_changes_with_content(self):
         a = [{"id": "library://playlist/1", "name": "x"}]
         b = [{"id": "library://playlist/1", "name": "renamed"}]
+        c = [
+            {
+                "id": "library://playlist/1",
+                "name": "x",
+                "tracks": [{"id": "library://track/1", "name": "s1"}],
+            }
+        ]
         self.assertNotEqual(playlists.fingerprint(a), playlists.fingerprint(b))
+        self.assertNotEqual(playlists.fingerprint(a), playlists.fingerprint(c))
 
     def test_fit_payload_keeps_covers_when_small(self):
         items = [
