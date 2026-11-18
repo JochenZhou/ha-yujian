@@ -47,16 +47,20 @@
           "port": "端口",
           "token": "Token",
           "duration": "默认横幅秒数",
-          "tts_entity": "语音合成服务（TTS）"
+          "tts_entity": "语音合成服务（TTS）",
+          "target_entity_id": "目标播放器（Music Assistant）",
+          "sync_playlists": "同步歌单到电视"
         },
-        "description": "调整连接参数和默认时长。可选 TTS 服务仅用于 speak: ha；speak: tv 使用电视自身的语音引擎。",
+        "description": "调整连接参数、语音播报 TTS 及音乐点播选项。以下可选实体均可在不需要时留空。",
         "data_description": {
           "name": "此设备在 Home Assistant 中显示的名称。",
           "host": "电视当前的局域网 IPv4 地址。",
           "port": "玉简 HTTP 服务端口，默认 8791。",
           "token": "电视端当前的访问 Token；重置后需保持一致。",
           "duration": "未指定 duration 时使用的横幅停留时间，1–30 秒。",
-          "tts_entity": "仅 speak: ha 使用；电视需能访问 HA 生成的音频地址。"
+          "tts_entity": "仅用于横幅通知语音播报（speak: ha），适合系统无中文 TTS 的 Android 6 电视；不用可留空。",
+          "target_entity_id": "电视选歌/点播歌单时控制的 Music Assistant 播放器。留空则按电视型号自动匹配本机；如需播到其他音响或自动匹配不到时再手动选择。",
+          "sync_playlists": "定期将 Music Assistant 歌单与曲目详单推送到电视，支持在电视端浏览并点播。"
         }
       }
     }

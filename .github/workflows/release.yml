@@ -1,0 +1,54 @@
+name: Test and Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install test dependencies
+        run: python -m pip install --upgrade pip && pip install aiohttp pillow voluptuous homeassistant
+
+      - name: Validate translations and module names
+        run: |
+          python scripts/check_names.py custom_components/yujian/*.py
+          python - << 'EOF'
+          import json
+          for path in (
+              "custom_components/yujian/manifest.json",
+              "custom_components/yujian/strings.json",
+              "custom_components/yujian/translations/zh-Hans.json",
+              "custom_components/yujian/translations/en.json",
+          ):
+              with open(path, encoding="utf-8") as fh:
+                  data = json.load(fh)
+              if path.endswith(".json") and "options" in data:
+                  fields = data["options"]["step"]["init"]["data"]
+                  for required in ("tts_entity", "target_entity_id", "sync_playlists"):
+                      assert required in fields, f"{required} missing from {path}"
+          print("OK: translations verified")
+          EOF
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true

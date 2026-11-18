@@ -41,14 +41,16 @@
     "step": {
       "init": {
         "title": "Yujian settings",
-        "description": "Adjust connection details and default duration. Optional HA TTS is used by speak: ha; speak: tv uses the TV speech engine.",
+        "description": "Adjust connection details, optional TTS speech, and Music Assistant playlist playback options.",
         "data": {
           "name": "Name",
           "host": "TV IP address",
           "port": "Port",
           "token": "Token",
           "duration": "Default banner duration",
-          "tts_entity": "Text-to-speech service (TTS)"
+          "tts_entity": "Text-to-speech service (TTS)",
+          "target_entity_id": "Target music player",
+          "sync_playlists": "Sync playlists to TV"
         },
         "data_description": {
           "name": "Device name shown in Home Assistant.",
@@ -56,7 +58,9 @@
           "port": "Yujian HTTP service port; defaults to 8791.",
           "token": "Current access token from the TV app; update it if the token has been reset.",
           "duration": "Banner duration used when duration is omitted, from 1 to 30 seconds.",
-          "tts_entity": "Used only by speak: ha. The TV must be able to fetch audio from Home Assistant."
+          "tts_entity": "Used only by speak: ha banner speech (required for Android 6 TVs without Chinese TTS). Leave empty if unused.",
+          "target_entity_id": "Music Assistant player used when picking playlists or tracks on the TV. Leave empty to auto-match this TV by model.",
+          "sync_playlists": "Periodically push Music Assistant playlists and track lists to the TV for browsing and playback."
         }
       }
     }
