@@ -1,4 +1,4 @@
-"""Numeric WLED sync settings (UDP port and reactivity sensitivity)."""
+"""Numeric WLED sync settings (UDP port and dynamic resolution)."""
 
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.const import PERCENTAGE
@@ -13,7 +13,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities(
         [
             YujianWledPortNumber(entry, coordinator, "wled_sync_port"),
-            YujianWledGainNumber(entry, coordinator, "wled_sync_gain"),
+            YujianWledDynamicsNumber(entry, coordinator, "wled_sync_dynamics"),
         ]
     )
 
@@ -40,12 +40,12 @@ class YujianWledPortNumber(YujianEntity, NumberEntity):
         await self.async_set_sendspin_config(wled_sync_port=int(round(value)))
 
 
-class YujianWledGainNumber(YujianEntity, NumberEntity):
+class YujianWledDynamicsNumber(YujianEntity, NumberEntity):
     _attr_entity_category = EntityCategory.CONFIG
     _attr_icon = "mdi:tune-vertical"
     _attr_mode = NumberMode.SLIDER
-    _attr_native_min_value = 10
-    _attr_native_max_value = 200
+    _attr_native_min_value = 0
+    _attr_native_max_value = 100
     _attr_native_step = 5
     _attr_native_unit_of_measurement = PERCENTAGE
 
@@ -61,4 +61,4 @@ class YujianWledGainNumber(YujianEntity, NumberEntity):
         return (self.coordinator.data or {}).get(self._key)
 
     async def async_set_native_value(self, value: float) -> None:
-        await self.async_set_sendspin_config(wled_sync_gain=int(round(value)))
+        await self.async_set_sendspin_config(wled_sync_dynamics=int(round(value)))

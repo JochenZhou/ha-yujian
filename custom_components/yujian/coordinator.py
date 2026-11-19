@@ -63,7 +63,7 @@ class YujianCoordinator(DataUpdateCoordinator):
                 "player_style",
                 "wled_sync_enabled",
                 "wled_sync_port",
-                "wled_sync_gain",
+                "wled_sync_dynamics",
                 "wled_color_sync_enabled",
                 "wled_color_host",
                 "wled_effect",

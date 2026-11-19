@@ -127,8 +127,8 @@
       "wled_sync_port": {
         "name": "WLED 组播 UDP 端口"
       },
-      "wled_sync_gain": {
-        "name": "WLED 律动灵敏度"
+      "wled_sync_dynamics": {
+        "name": "WLED 律动解析度"
       }
     },
     "text": {
