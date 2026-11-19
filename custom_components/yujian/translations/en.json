@@ -126,6 +126,9 @@
     "number": {
       "wled_sync_port": {
         "name": "WLED UDP port"
+      },
+      "wled_sync_gain": {
+        "name": "WLED audio reactivity sensitivity"
       }
     },
     "text": {

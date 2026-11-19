@@ -221,6 +221,7 @@ class YujianClient:
         player_style: str | None = None,
         wled_sync_enabled: bool | None = None,
         wled_sync_port: int | None = None,
+        wled_sync_gain: int | None = None,
         wled_color_sync_enabled: bool | None = None,
         wled_color_host: str | None = None,
         wled_effect: str | None = None,
@@ -233,6 +234,8 @@ class YujianClient:
             payload["wled_sync_enabled"] = wled_sync_enabled
         if wled_sync_port is not None:
             payload["wled_sync_port"] = int(wled_sync_port)
+        if wled_sync_gain is not None:
+            payload["wled_sync_gain"] = int(wled_sync_gain)
         if wled_color_sync_enabled is not None:
             payload["wled_color_sync_enabled"] = wled_color_sync_enabled
         if wled_color_host is not None:
