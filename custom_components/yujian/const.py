@@ -126,16 +126,15 @@ MAX_PLAYLISTS = 200
 # Sendspin player visual styles (App v1.10.3+).
 PLAYER_STYLES = ("vinyl", "cover_blur")
 
-# Curated WLED effect keys accepted by App v1.10.3+ (and default fallback).
+# Curated 1D AudioReactive WLED effect keys accepted by App v1.10.4+ (and default fallback).
 WLED_EFFECTS = (
     "custom",
     "gravcentric",
-    "geq",
-    "midnoise",
-    "waterfall",
-    "pixels",
     "gravimeter",
-    "solid",
+    "gravfreq",
+    "pixelwave",
+    "pixels",
+    "puddles",
 )
 
 DEFAULT_WLED_SYNC_PORT = 11988

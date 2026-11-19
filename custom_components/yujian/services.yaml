@@ -226,16 +226,15 @@ set_config:
         text: null
     wled_effect:
       name: 推荐 WLED 律动效果
-      description: 一键为 WLED 灯带切换适合音乐律动的柔和预设效果；选择 custom 则保持灯带当前效果。
+      description: 一键为 WLED 灯带切换适合一维灯带的音乐律动效果；选择 custom 则保持灯带当前效果。
       selector:
         select:
           translation_key: wled_effect
           options:
           - custom
           - gravcentric
-          - geq
-          - midnoise
-          - waterfall
-          - pixels
           - gravimeter
-          - solid
+          - gravfreq
+          - pixelwave
+          - pixels
+          - puddles

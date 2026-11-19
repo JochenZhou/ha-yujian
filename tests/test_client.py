@@ -180,7 +180,7 @@ class ClientContractTests(unittest.IsolatedAsyncioTestCase):
             wled_sync_port=12000,
             wled_color_sync_enabled=True,
             wled_color_host="192.168.101.210",
-            wled_effect="midnoise",
+            wled_effect="pixelwave",
         )
         method, path, payload = self.requests[-1]
         self.assertEqual((method, path), ("POST", "/test-token/sendspin"))
@@ -193,7 +193,7 @@ class ClientContractTests(unittest.IsolatedAsyncioTestCase):
                 "wled_sync_port": 12000,
                 "wled_color_sync_enabled": True,
                 "wled_color_host": "192.168.101.210",
-                "wled_effect": "midnoise",
+                "wled_effect": "pixelwave",
             },
         )
 

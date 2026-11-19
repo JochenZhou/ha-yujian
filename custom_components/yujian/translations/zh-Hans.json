@@ -115,12 +115,11 @@
         "state": {
           "custom": "保持灯带当前效果",
           "gravcentric": "中轴舒展 (Gravcentric · 推荐)",
-          "geq": "频谱均衡 (GEQ)",
-          "midnoise": "柔光噪波 (Midnoise)",
-          "waterfall": "星河流瀑 (Waterfall)",
-          "pixels": "星点微光 (Pixels)",
           "gravimeter": "呼吸音柱 (Gravimeter)",
-          "solid": "纯色静谧 (Solid)"
+          "gravfreq": "频谱音柱 (Gravfreq)",
+          "pixelwave": "音浪流光 (Pixelwave)",
+          "pixels": "星点跃动 (Pixels)",
+          "puddles": "音律涟漪 (Puddles)"
         }
       }
     },
@@ -324,12 +323,11 @@
       "options": {
         "custom": "保持灯带当前效果",
         "gravcentric": "中轴舒展 (Gravcentric · 推荐)",
-        "geq": "频谱均衡 (GEQ)",
-        "midnoise": "柔光噪波 (Midnoise)",
-        "waterfall": "星河流瀑 (Waterfall)",
-        "pixels": "星点微光 (Pixels)",
         "gravimeter": "呼吸音柱 (Gravimeter)",
-        "solid": "纯色静谧 (Solid)"
+        "gravfreq": "频谱音柱 (Gravfreq)",
+        "pixelwave": "音浪流光 (Pixelwave)",
+        "pixels": "星点跃动 (Pixels)",
+        "puddles": "音律涟漪 (Puddles)"
       }
     }
   }

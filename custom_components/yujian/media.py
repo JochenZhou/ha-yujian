@@ -7,6 +7,7 @@ MA directly, so the TV never needs a separate MA token.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import asyncio
 import base64
 import logging
@@ -163,17 +164,36 @@ def find_browse_player(hass, preferred: str | None = None) -> str | None:
     return available[0] if available else None
 
 
+def _to_media_dict(value: Any) -> dict[str, Any]:
+    """Normalize a dict, Mapping, or Home Assistant BrowseMedia instance."""
+    if isinstance(value, dict):
+        return value
+    as_dict = getattr(value, "as_dict", None)
+    if callable(as_dict):
+        converted = as_dict()
+        if isinstance(converted, dict):
+            return converted
+    if isinstance(value, Mapping):
+        return dict(value)
+    return {}
+
+
 def _unwrap(response: Any, entity_id: str) -> dict[str, Any]:
-    """Unwrap the browse_media service response, which is keyed by entity."""
-    if isinstance(response, dict):
+    """Unwrap the browse_media service response, which is keyed by entity.
+
+    In Home Assistant Core, calling ``media_player.browse_media`` in-process via
+    ``hass.services.async_call(..., return_response=True)`` returns
+    ``{entity_id: BrowseMedia(...)}`` rather than pre-serialized dicts.
+    """
+    if isinstance(response, Mapping):
         if entity_id in response:
             value = response[entity_id]
         elif len(response) == 1:
             value = next(iter(response.values()))
         else:
             value = response
-        return value if isinstance(value, dict) else {}
-    return {}
+        return _to_media_dict(value)
+    return _to_media_dict(response)
 
 
 async def async_browse(

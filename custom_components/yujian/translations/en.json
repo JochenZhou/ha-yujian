@@ -114,13 +114,12 @@
         "name": "Recommended WLED effect",
         "state": {
           "custom": "Keep current lamp effect",
-          "gravcentric": "Gravcentric (balanced center wave)",
-          "geq": "GEQ (16-band spectrum)",
-          "midnoise": "Midnoise (gentle vocal flow)",
-          "waterfall": "Waterfall (flowing trail)",
-          "pixels": "Pixels (soft sparkles)",
-          "gravimeter": "Gravimeter (smooth level meter)",
-          "solid": "Solid (calm ambient cover color)"
+          "gravcentric": "Gravcentric (center-out symmetry)",
+          "gravimeter": "Gravimeter (classic level bar)",
+          "gravfreq": "Gravfreq (frequency-colored bar)",
+          "pixelwave": "Pixelwave (flowing audio wave)",
+          "pixels": "Pixels (rhythmic sparkles)",
+          "puddles": "Puddles (beat ripples)"
         }
       }
     },
@@ -323,13 +322,12 @@
     "wled_effect": {
       "options": {
         "custom": "Keep current lamp effect",
-        "gravcentric": "Gravcentric (balanced center wave)",
-        "geq": "GEQ (16-band spectrum)",
-        "midnoise": "Midnoise (gentle vocal flow)",
-        "waterfall": "Waterfall (flowing trail)",
-        "pixels": "Pixels (soft sparkles)",
-        "gravimeter": "Gravimeter (smooth level meter)",
-        "solid": "Solid (calm ambient cover color)"
+        "gravcentric": "Gravcentric (center-out symmetry)",
+        "gravimeter": "Gravimeter (classic level bar)",
+        "gravfreq": "Gravfreq (frequency-colored bar)",
+        "pixelwave": "Pixelwave (flowing audio wave)",
+        "pixels": "Pixels (rhythmic sparkles)",
+        "puddles": "Puddles (beat ripples)"
       }
     }
   }

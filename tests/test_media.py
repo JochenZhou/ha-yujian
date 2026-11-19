@@ -282,6 +282,65 @@ class BrowsePlayTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
+    async def test_browse_unwraps_real_homeassistant_browse_media_objects(self):
+        from homeassistant.components.media_player import BrowseMedia
+
+        root_bm = BrowseMedia(
+            media_class="directory",
+            media_content_id="",
+            media_content_type="music_assistant",
+            title="Music Assistant",
+            can_play=False,
+            can_expand=True,
+            children=[
+                BrowseMedia(
+                    media_class="directory",
+                    media_content_id="playlists",
+                    media_content_type="music_assistant",
+                    title="Playlists",
+                    can_play=False,
+                    can_expand=True,
+                )
+            ],
+        )
+        playlists_bm = BrowseMedia(
+            media_class="directory",
+            media_content_id="playlists",
+            media_content_type="playlist",
+            title="Playlists",
+            can_play=False,
+            can_expand=True,
+            children=[
+                BrowseMedia(
+                    media_class="playlist",
+                    media_content_id="library://playlist/22",
+                    media_content_type="music",
+                    title="爱是永不止息",
+                    can_play=True,
+                    can_expand=True,
+                    thumbnail="http://192.168.101.75:8095/cover.jpg",
+                )
+            ],
+        )
+        hass = _hass()
+        hass.services.async_call = AsyncMock(
+            side_effect=[
+                {"media_player.a": root_bm},
+                {"media_player.a": playlists_bm},
+            ]
+        )
+        items = await media.async_list_playlists(hass, "media_player.a")
+        self.assertEqual(
+            items,
+            [
+                {
+                    "id": "library://playlist/22",
+                    "name": "爱是永不止息",
+                    "thumbnail": "http://192.168.101.75:8095/cover.jpg",
+                }
+            ],
+        )
+
     async def test_play_track_prefers_music_assistant_start_item_when_available(self):
         hass = _hass()
         hass.services.has_service = MagicMock(return_value=True)
